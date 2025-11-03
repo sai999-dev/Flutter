@@ -30,6 +30,10 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Build folders (generated)
+build/
+**/build/
+
 # Symbolication related
 app.*.symbols
 
@@ -40,10 +44,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-
-# Build folders (generated)
-build/
-**/build/
 
 # Generated files
 *.g.dart
@@ -67,6 +67,3 @@ config.env
 coverage/
 *.lcov
 
-# Exceptions to above rules.
-!/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
-!/dev/ci/**/Gemfile.lock

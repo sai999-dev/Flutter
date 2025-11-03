@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../core/services/document_verification_service.dart';
+import 'package:flutter_backend/services/document_verification_service.dart';
 import 'document_upload_dialog.dart';
 
 /// Document Verification Page

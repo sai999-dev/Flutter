@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'secure_storage_service.dart';
+import '../storage/secure_storage_service.dart';
 
 /// Centralized API client with JWT token management
 /// Uses secure storage for JWT tokens (production-grade security)

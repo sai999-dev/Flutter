@@ -10,6 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
   
+  # Backend Package (Local Path)
+  flutter_backend:
+    path: ../flutter-backend
+  
   # UI Components
   cupertino_icons: ^1.0.6
   flutter_svg: ^2.0.9
@@ -54,6 +58,7 @@ dependencies:
   # File & Export
   csv: ^6.0.0
   path_provider: ^2.1.1
+  path: ^1.9.0
   share_plus: ^7.2.1
   file_picker: ^8.0.0+1
   image_picker: ^1.0.7

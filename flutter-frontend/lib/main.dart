@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'core/services/zipcode_lookup_service.dart';
+import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
@@ -8,18 +8,18 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:csv/csv.dart';
-// path_provider no longer required for CSV sharing (using in-memory XFile)
 import 'package:share_plus/share_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-// import 'package:sign_in_with_apple/sign_in_with_apple.dart'; // Not currently used
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'core/services/lead_service.dart';
-import 'core/services/auth_service.dart';
-import 'core/services/notification_service.dart';
-import 'core/services/territory_service.dart';
-import 'core/services/api_client.dart';
-import 'core/services/subscription_service.dart';
+// Backend Services (from package)
+import 'package:flutter_backend/services/lead_service.dart';
+import 'package:flutter_backend/services/auth_service.dart';
+import 'package:flutter_backend/services/notification_service.dart';
+import 'package:flutter_backend/services/territory_service.dart';
+import 'package:flutter_backend/services/api_client.dart';
+import 'package:flutter_backend/services/subscription_service.dart';
+// Frontend Widgets
 import 'widgets/document_upload_dialog.dart';
 import 'widgets/document_verification_page.dart';
 // Mobile App - Agency Self-Service Portal

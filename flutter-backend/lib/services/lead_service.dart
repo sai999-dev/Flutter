@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
-import 'cache_service.dart';
+import '../storage/cache_service.dart';
 
 /// Lead Management Service
 /// Implements all /api/mobile/leads/* endpoints with JWT authentication
