@@ -9,14 +9,26 @@ class ApiClient {
   // Backend API Middleware Layer (Separate Repository)
   // Connects to unified backend that exposes /api/mobile/* endpoints
   // Supports multiple ports for development flexibility
-  static const List<String> baseUrls = [
-    'http://127.0.0.1:3002',
-    'http://localhost:3002',
-    'http://127.0.0.1:3001',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://localhost:3000',
-  ];
+  
+  // Production API URL - Replace with your actual production backend URL
+  // For separate deployment, set this to your deployed backend API URL
+  static const String? productionApiUrl = null; // Set to: 'https://your-api-domain.com'
+  
+  static List<String> get baseUrls {
+    // If production URL is set, use it; otherwise fall back to development URLs
+    if (productionApiUrl != null && productionApiUrl!.isNotEmpty) {
+      return [productionApiUrl!];
+    }
+    // Development URLs (only used when productionApiUrl is null)
+    return [
+      'http://127.0.0.1:3002',
+      'http://localhost:3002',
+      'http://127.0.0.1:3001',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://localhost:3000',
+    ];
+  }
 
   /// Get base URLs list (for use in services that need multipart requests)
   static List<String> get baseUrlsList => baseUrls;

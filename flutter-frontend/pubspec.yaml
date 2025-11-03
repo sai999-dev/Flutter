@@ -10,9 +10,21 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # Backend Package (Local Path)
+  # Backend Package
+  # For LOCAL DEVELOPMENT (current setup):
   flutter_backend:
     path: ../flutter-backend
+  
+  # For SEPARATE DEPLOYMENT, replace above with one of these options:
+  # 
+  # Option 1: Git Dependency (Recommended for separate deployment)
+  # flutter_backend:
+  #   git:
+  #     url: https://github.com/your-org/flutter-backend.git
+  #     ref: main
+  #
+  # Option 2: Published Package
+  # flutter_backend: ^1.0.0
   
   # UI Components
   cupertino_icons: ^1.0.6

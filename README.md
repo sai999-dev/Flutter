@@ -23,28 +23,33 @@ Flutter/
 └── flutter-frontend/     # Frontend app (UI, screens, widgets)
 ```
 
-## ⚠️ Separate Deployment Note
+## ⚠️ Separate Deployment Configuration
 
-For separate deployment, update `flutter-frontend/pubspec.yaml`:
+### 1. Update Dependency Path
 
-**Change from:**
+In `flutter-frontend/pubspec.yaml`, change from local path to Git dependency:
+
 ```yaml
-flutter_backend:
-  path: ../flutter-backend
-```
+# Comment out local path:
+# flutter_backend:
+#   path: ../flutter-backend
 
-**To Git dependency:**
-```yaml
+# Uncomment and update Git dependency:
 flutter_backend:
   git:
     url: https://github.com/your-org/flutter-backend.git
     ref: main
 ```
 
-Or publish backend package and use:
-```yaml
-flutter_backend: ^1.0.0
+### 2. Set Production API URL
+
+In `flutter-backend/lib/services/api_client.dart`, set production URL:
+
+```dart
+static const String? productionApiUrl = 'https://your-production-api.com';
 ```
+
+For development, leave it as `null` to use localhost URLs.
 
 ## 🏗️ Build
 
