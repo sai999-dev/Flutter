@@ -1,0 +1,71 @@
+[
+  {
+    "city": "Dallas",
+    "state": "Texas",
+    "specific_areas": [
+      {
+        "name": "Downtown Dallas",
+        "zipcodes": ["75201", "75202", "75203", "75204", "75205", "75206", "75207", "75208", "75209", "75210"],
+        "description": "Central business district and arts district"
+      },
+      {
+        "name": "Uptown Dallas",
+        "zipcodes": ["75201", "75204", "75205", "75206", "75219", "75225"],
+        "description": "Upscale residential and entertainment district"
+      },
+      {
+        "name": "Deep Ellum",
+        "zipcodes": ["75226", "75227"],
+        "description": "Historic arts and entertainment district"
+      },
+      {
+        "name": "Oak Lawn",
+        "zipcodes": ["75219", "75220", "75225"],
+        "description": "Diverse neighborhood with shopping and dining"
+      },
+      {
+        "name": "Lakewood",
+        "zipcodes": ["75214", "75218", "75223"],
+        "description": "Historic neighborhood near White Rock Lake"
+      },
+      {
+        "name": "Preston Hollow",
+        "zipcodes": ["75220", "75225", "75230", "75231"],
+        "description": "Affluent residential area"
+      },
+      {
+        "name": "Highland Park",
+        "zipcodes": ["75205", "75209", "75220"],
+        "description": "Exclusive residential enclave"
+      },
+      {
+        "name": "University Park",
+        "zipcodes": ["75205", "75225"],
+        "description": "Residential area near SMU"
+      },
+      {
+        "name": "East Dallas",
+        "zipcodes": ["75214", "75218", "75223", "75226", "75227", "75228"],
+        "description": "Historic neighborhoods east of downtown"
+      },
+      {
+        "name": "North Dallas",
+        "zipcodes": ["75225", "75230", "75231", "75240", "75243", "75244", "75248", "75251", "75252"],
+        "description": "Northern residential and business districts"
+      },
+      {
+        "name": "South Dallas",
+        "zipcodes": ["75210", "75215", "75216", "75217", "75223", "75224"],
+        "description": "Southern residential areas"
+      },
+      {
+        "name": "West Dallas",
+        "zipcodes": ["75211", "75212", "75220", "75233", "75234"],
+        "description": "Western residential and industrial areas"
+      }
+    ]
+  }
+]
+
+
+
