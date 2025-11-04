@@ -47,12 +47,24 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // TODO: Configure release signing
+            // signingConfig signingConfigs.release
+            signingConfig signingConfigs.debug  // ⚠️ CHANGE THIS for production
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    
+    // TODO: Add signing configs for production
+    // signingConfigs {
+    //     release {
+    //         storeFile file('path/to/keystore.jks')
+    //         storePassword System.getenv("KEYSTORE_PASSWORD")
+    //         keyAlias System.getenv("KEY_ALIAS")
+    //         keyPassword System.getenv("KEY_PASSWORD")
+    //     }
+    // }
 }
 
 flutter {

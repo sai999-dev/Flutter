@@ -6,7 +6,8 @@
         android:label="Starboy Analytica"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
+        <!-- Cleartext disabled for production security. For development, create network_security_config.xml if needed -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

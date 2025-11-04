@@ -987,97 +987,21 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
     await prefs.setStringList('user_zipcodes', _selectedZipcodes);
   }
 
-  Future<void> _addZipcode() async {
-    final zipcode = _zipcodeController.text.trim();
-    if (zipcode.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a zipcode')),
-      );
-      return;
-    }
-    if (zipcode.length != 5 || !RegExp(r'^\d{5}$').hasMatch(zipcode)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zipcode must be 5 digits')),
-      );
-      return;
-    }
-    if (_selectedZipcodes.contains(zipcode)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Zipcode already added')),
-      );
-      return;
-    }
-    if (_selectedZipcodes.length >= _maxZipcodes) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Maximum $_maxZipcodes zipcodes for $_selectedPlan')),
-      );
-      return;
-    }
-
-    // ✅ LOOKUP ZIPCODE VIA API
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🔍 Looking up zipcode...'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-
-    final zipcodeData = await _lookupZipcodeAPI(zipcode);
-    if (zipcodeData == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Invalid USA zipcode: $zipcode'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _selectedZipcodes.add(zipcode);
-      _zipcodeController.clear();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            '✓ Added $zipcode - ${zipcodeData['city']}, ${zipcodeData['state']}'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  // ✅ REAL USA ZIPCODE LOOKUP VIA API
-  Future<Map<String, String>?> _lookupZipcodeAPI(String zipcode) async {
+  // Load zipcodes assigned by admin from backend
+  Future<List<String>> _loadAdminZipcodes() async {
     try {
-      final response = await http.get(
-        Uri.parse('https://api.zippopotam.us/us/$zipcode'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final places = data['places'] as List;
-        if (places.isNotEmpty) {
-          final place = places[0];
-          return {
-            'code': zipcode,
-            'city': place['place name'] ?? 'Unknown',
-            'state': place['state abbreviation'] ?? 'Unknown',
-            'stateName': place['state'] ?? 'Unknown',
-          };
-        }
-      }
-      return null;
+      // Fetch zipcodes from backend (admin-assigned)
+      final zipcodes = await TerritoryService.getZipcodes();
+      return zipcodes;
     } catch (e) {
-      print('Zipcode lookup error: $e');
-      return null;
+      print('Error loading admin zipcodes: $e');
+      return [];
     }
   }
 
-  void _removeZipcode(String zipcode) {
-    setState(() => _selectedZipcodes.remove(zipcode));
-  }
+  // Removed _addZipcode - zipcodes are now assigned by admin only
+
+  // Removed _lookupZipcodeAPI and _removeZipcode - zipcodes are now admin-managed
 
   void _navigateToHome(BuildContext context) {
     // Convert List<String> to List<Map<String, String>>
@@ -1792,66 +1716,76 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text('Enter Zipcode',
-              style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
+          // Info message that admin assigns zipcodes
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F9FF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF00888C), width: 1),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           Row(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _zipcodeController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: '75001',
-                    filled: true,
-                    fillColor: const Color(0xFFF5F7FA),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    Icon(Icons.info_outline, color: Color(0xFF00888C), size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Zipcodes Assigned by Admin',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00888C),
+                      ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide:
-                          const BorderSide(color: Color(0xFF00888C), width: 2),
-                    ),
-                  ),
-                  onSubmitted: (_) => _addZipcode(),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _addZipcode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00888C),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                SizedBox(height: 8),
+                Text(
+                  'Your zipcodes will be assigned by the administrator after account creation. You\'ll be able to see them in the app once they\'re assigned.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF64748B),
+                    height: 1.5,
                   ),
-                  child: const Text('Add',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 24),
-          if (_selectedZipcodes.isNotEmpty) ...[
+          // Display zipcodes if any are loaded from backend
+          FutureBuilder<List<String>>(
+            future: _loadAdminZipcodes(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              final adminZipcodes = snapshot.data ?? [];
+              
+              if (adminZipcodes.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your Assigned Zipcodes',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A202C),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _selectedZipcodes.map((zipcode) {
+                    children: adminZipcodes.map((zipcode) {
                 return Chip(
                   label: Text(zipcode),
-                  deleteIcon: const Icon(Icons.close, size: 18),
-                  onDeleted: () => _removeZipcode(zipcode),
                   backgroundColor: const Color(0xFFE8EAFF),
                   labelStyle: const TextStyle(
                     color: Color(0xFF3454D1),
@@ -1860,14 +1794,17 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                 );
               }).toList(),
             ),
-            const SizedBox(height: 16),
-          ],
+                  const SizedBox(height: 8),
           Text(
-            '${_selectedZipcodes.length} zipcode(s) selected',
+                    '${adminZipcodes.length} zipcode(s) assigned',
             style: const TextStyle(
               color: Color(0xFF718096),
               fontSize: 14,
             ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 32),
           SizedBox(
@@ -10359,7 +10296,7 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
       final info = await ZipcodeLookupService.lookup(zipcode);
       final cityDisplay = (info.city != null && info.state != null)
           ? '${info.city}, ${info.state}'
-          : (info.city ?? null);
+          : info.city;
       setState(() {
         _detectedCity = cityDisplay;
       });
@@ -10924,12 +10861,13 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
           ),
           const SizedBox(height: 24),
 
-          // Basic Plan
+          // Plan 1: $99 for 3 zipcodes
           _buildPlanOption(
             name: 'Basic',
             price: 99,
-            zipcodes: 'Up to 3 zipcodes',
+            zipcodes: '3 zipcodes included',
             features: [
+              '3 zipcodes included',
               'Real-time lead notifications',
               'Basic analytics',
               'Email support',
@@ -10941,12 +10879,13 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
 
           const SizedBox(height: 16),
 
-          // Premium Plan
+          // Plan 2: $199 for 7 zipcodes
           _buildPlanOption(
             name: 'Premium',
             price: 199,
-            zipcodes: 'Up to 7 zipcodes',
+            zipcodes: '7 zipcodes included',
             features: [
+              '7 zipcodes included',
               'Everything in Basic',
               'Priority lead delivery',
               'Advanced analytics',
@@ -10958,18 +10897,37 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
 
           const SizedBox(height: 16),
 
-          // Business Plan
+          // Plan 3: $299 for 10 zipcodes
           _buildPlanOption(
             name: 'Business',
             price: 299,
-            zipcodes: 'Up to 10 zipcodes',
+            zipcodes: '10 zipcodes included',
             features: [
+              '10 zipcodes included',
               'Everything in Premium',
               'Dedicated account manager',
               'Advanced reporting',
               'Export & integrations',
             ],
             isCurrentPlan: currentPlan == 'Business',
+            isRecommended: false,
+          ),
+
+          const SizedBox(height: 16),
+
+          // Plan 4: $399 for 15 zipcodes
+          _buildPlanOption(
+            name: 'Enterprise',
+            price: 399,
+            zipcodes: '15 zipcodes included',
+            features: [
+              '15 zipcodes included',
+              'Everything in Business',
+              'White-glove onboarding',
+              'Custom integrations',
+              '24/7 priority support',
+            ],
+            isCurrentPlan: currentPlan == 'Enterprise',
             isRecommended: false,
           ),
         ],
@@ -11548,32 +11506,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _smsNotifications = false;
   bool _darkMode = false;
 
-  // ✅ REAL USA ZIPCODE LOOKUP VIA API
-  Future<Map<String, String>?> _lookupZipcode(String zipcode) async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://api.zippopotam.us/us/$zipcode'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final places = data['places'] as List;
-        if (places.isNotEmpty) {
-          final place = places[0];
-          return {
-            'code': zipcode,
-            'city': place['place name'] ?? 'Unknown',
-            'state': place['state abbreviation'] ?? 'Unknown',
-            'stateName': place['state'] ?? 'Unknown',
-          };
-        }
-      }
-      return null;
-    } catch (e) {
-      print('Zipcode lookup error: $e');
-      return null;
-    }
-  }
+  // Removed _lookupZipcode - zipcodes are now admin-managed
+  // This method was used in old zipcode add dialog which has been removed
 
   // Zipcode database - USA nationwide
   final Map<String, List<Map<String, String>>> _stateZipcodes = {
@@ -11848,6 +11782,10 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // Removed _detectMyLocation - zipcodes are now admin-managed
+  // This method was used in old zipcode add dialog which has been removed
+  @Deprecated('Zipcodes are now admin-managed')
+  // ignore: unused_element
   Future<void> _detectMyLocation(TextEditingController zipcodeController,
       StateSetter setDialogState) async {
     try {
@@ -11982,58 +11920,18 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _showAddZipcodeDialog() async {
-    final zipcodeController = TextEditingController();
-    String? selectedState;
-    String? selectedCity;
-    List<String> availableCities = [];
-    List<Map<String, String>> availableZipcodes = [];
-
-    // Load current user zipcodes to check plan limit
-    final prefs = await SharedPreferences.getInstance();
-    final savedZipcodes = prefs.getStringList('user_zipcodes') ?? [];
-    final maxAreas = _currentPlan == 'Basic'
-        ? 3
-        : _currentPlan == 'Premium'
-            ? 7
-            : 10;
-
-    if (savedZipcodes.length >= maxAreas) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('⚠ Limit reached! Upgrade your plan to add more areas.')),
-      );
-      return;
-    }
-
+    // This method is deprecated - zipcodes are now admin-managed
+    // Keeping for backward compatibility but showing read-only view
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // Update cities when state changes
-          if (selectedState != null) {
-            final stateCities = <String>{};
-            for (var zipData in _stateZipcodes[selectedState]!) {
-              stateCities.add(zipData['city']!);
-            }
-            availableCities = stateCities.toList()..sort();
-          }
-
-          // Update zipcodes when city changes
-          if (selectedState != null && selectedCity != null) {
-            availableZipcodes = _stateZipcodes[selectedState]!
-                .where((z) => z['city'] == selectedCity)
-                .toList();
-          }
-
-          return AlertDialog(
+      builder: (context) => AlertDialog(
             backgroundColor: Colors.white,
             title: const Row(
               children: [
-                Icon(Icons.add_location, color: Color(0xFF10B981)),
+                Icon(Icons.location_on, color: Color(0xFF00888C)),
                 SizedBox(width: 8),
                 Expanded(
-                    child: Text('Add Service Area',
+                    child: Text('View Service Areas',
                         style: TextStyle(color: Colors.black87))),
               ],
             ),
@@ -12042,272 +11940,110 @@ class _SettingsPageState extends State<SettingsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // STEP 1: Select State
-                  const Text('Step 1: Select State',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.black87)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedState,
-                    decoration: const InputDecoration(
-                      labelText: 'Choose State',
-                      labelStyle: TextStyle(color: Colors.black87),
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.location_city),
+                  // Info message that admin manages zipcodes
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF00888C), width: 1),
                     ),
-                    style: const TextStyle(color: Colors.black87, fontSize: 16),
-                    dropdownColor: Colors.white,
-                    items: _stateZipcodes.keys
-                        .map((state) => DropdownMenuItem(
-                              value: state,
-                              child: Text(state,
-                                  style:
-                                      const TextStyle(color: Colors.black87)),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectedState = value;
-                        selectedCity = null; // Reset city when state changes
-                        availableZipcodes.clear();
-                      });
-                    },
-                  ),
-
-                  // STEP 2: Select City (only show if state is selected)
-                  if (selectedState != null) ...[
-                    const SizedBox(height: 16),
-                    const Text('Step 2: Select City',
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Color(0xFF00888C), size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Zipcodes are managed by the administrator. Contact support to add or modify zipcodes.',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.black87)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedCity,
-                      decoration: const InputDecoration(
-                        labelText: 'Choose City',
-                        labelStyle: TextStyle(color: Colors.black87),
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.location_on),
-                      ),
-                      style:
-                          const TextStyle(color: Colors.black87, fontSize: 16),
-                      dropdownColor: Colors.white,
-                      items: availableCities
-                          .map((city) => DropdownMenuItem(
-                                value: city,
-                                child: Text(city,
-                                    style:
-                                        const TextStyle(color: Colors.black87)),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          selectedCity = value;
-                        });
-                      },
-                    ),
-                  ],
-
-                  // STEP 3: Select Zipcodes (only show if city is selected)
-                  if (selectedCity != null && availableZipcodes.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    const Text('Step 3: Select Zipcodes',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.black87)),
-                    const SizedBox(height: 8),
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 200),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: availableZipcodes.length,
-                        itemBuilder: (context, i) {
-                          final zipData = availableZipcodes[i];
-                          final zipcode = zipData['code']!;
-                          final isAlreadyAdded =
-                              savedZipcodes.any((z) => z.startsWith(zipcode));
-                          return ListTile(
-                            leading: Icon(
-                              isAlreadyAdded
-                                  ? Icons.check_circle
-                                  : Icons.add_circle_outline,
-                              color: isAlreadyAdded
-                                  ? Colors.green
-                                  : const Color(0xFF10B981),
+                              fontSize: 13,
+                              color: Color(0xFF64748B),
+                              height: 1.4,
                             ),
-                            title: Text(zipcode,
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isAlreadyAdded
-                                        ? Colors.grey
-                                        : Colors.black87)),
-                            subtitle: Text('$selectedCity, $selectedState',
-                                style: TextStyle(
-                                    color: isAlreadyAdded
-                                        ? Colors.grey
-                                        : Colors.black54)),
-                            trailing: isAlreadyAdded
-                                ? const Text('Added',
-                                    style: TextStyle(color: Colors.green))
-                                : null,
-                            enabled: !isAlreadyAdded,
-                            onTap: isAlreadyAdded
-                                ? null
-                                : () async {
-                                    try {
-                                      // ✅ USE NEW TERRITORYSERVICE - Save to backend + local
-                                      await TerritoryService.addZipcode(zipcode,
-                                          city: selectedCity);
-                                      Navigator.pop(context);
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                            content: Text(
-                                                '✓ Added $zipcode - $selectedCity, $selectedState'),
-                                            backgroundColor:
-                                                const Color(0xFF10B981)),
-                                      );
-                                      setState(() {}); // Refresh settings page
-                                    } catch (e) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text('❌ $e'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                          );
-                        },
-                      ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-
-                  // Manual entry option
-                  const SizedBox(height: 16),
-                  const Divider(),
+                  ),
+                    const SizedBox(height: 16),
+                  // Display current zipcodes from backend
+                  FutureBuilder<List<String>>(
+                    future: TerritoryService.getZipcodes(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: CircularProgressIndicator(),
+                        ));
+                      }
+                      
+                      final zipcodes = snapshot.data ?? [];
+                      
+                      if (zipcodes.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text(
+                            'No zipcodes assigned yet. Please contact support.',
+                            style: TextStyle(color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Your Assigned Zipcodes',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: zipcodes.map((zipcode) {
+                              return Chip(
+                                label: Text(zipcode),
+                                backgroundColor: const Color(0xFFE8EAFF),
+                                labelStyle: const TextStyle(
+                                  color: Color(0xFF3454D1),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              );
+                            }).toList(),
+                          ),
                   const SizedBox(height: 8),
-                  const Text('Or enter manually:',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
+                          Text(
+                            '${zipcodes.length} zipcode(s) assigned',
+                            style: const TextStyle(
+                              color: Color(0xFF718096),
                           fontSize: 14,
-                          color: Colors.black87)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: zipcodeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Enter Zipcode',
-                      labelStyle: TextStyle(color: Colors.black87),
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.edit_location),
-                      hintText: 'e.g., 75201',
-                      hintStyle: TextStyle(color: Colors.black38),
-                    ),
-                    style: const TextStyle(color: Colors.black87),
-                    keyboardType: TextInputType.number,
-                    maxLength: 5,
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await _detectMyLocation(
-                          zipcodeController, setDialogState);
+                            ),
+                          ),
+                        ],
+                      );
                     },
-                    icon: const Icon(Icons.my_location),
-                    label: const Text('Use My Location'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF6B35),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
                   ),
+                  const SizedBox(height: 16),
+                  const Text('Note: Contact administrator to add zipcodes',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey)),
                 ],
               ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel',
+                child: const Text('Close',
                     style: TextStyle(color: Colors.black87)),
               ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (zipcodeController.text.length == 5) {
-                    final zipcode = zipcodeController.text;
-
-                    // ✅ SHOW LOADING MESSAGE
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('🔍 Looking up zipcode...'),
-                        backgroundColor: Color(0xFF2563EB),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-
-                    // ✅ LOOKUP VIA API (SUPPORTS ALL 50 STATES)
-                    final zipcodeData = await _lookupZipcode(zipcode);
-
-                    if (zipcodeData != null) {
-                      final city = zipcodeData['city']!;
-                      final state = zipcodeData['state']!;
-
-                      try {
-                        // ✅ USE NEW TERRITORYSERVICE - Save to backend + local
-                        await TerritoryService.addZipcode(zipcode, city: city);
-
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('✓ Added $zipcode - $city, $state'),
-                            backgroundColor: const Color(0xFF10B981),
-                          ),
-                        );
-                        setState(() {}); // Refresh settings page
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('❌ $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    } else {
-                      // ❌ INVALID ZIPCODE
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              '❌ Invalid USA zipcode. Please check and try again.'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content:
-                              Text('⚠ Please enter a valid 5-digit zipcode')),
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Add Manual Entry'),
-              ),
             ],
-          );
-        },
       ),
     );
   }

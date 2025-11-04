@@ -12,40 +12,69 @@ class SubscriptionService {
     print('📦 Fetching subscription plans...');
 
     try {
-      final endpoint = '/api/mobile/subscription/plans';
+      // Build endpoint with query parameter if needed
+      String endpoint = '/api/mobile/subscription/plans';
+      if (activeOnly) {
+        endpoint += '?isActive=true';
+      }
+      
       final response = await ApiClient.get(
         endpoint,
         requireAuth: false, // Plans are typically public
       );
 
-      if (response == null || response.statusCode != 200) {
-        print('❌ Failed to fetch plans: ${response?.statusCode}');
+      if (response == null) {
+        print('❌ No response from server - backend may not be running');
+        print('💡 Make sure your backend server is running on http://localhost:3000, 3001, or 3002');
+        return [];
+      }
+
+      if (response.statusCode != 200) {
+        print('❌ Failed to fetch plans: Status ${response.statusCode}');
+        print('Response body: ${response.body}');
         return [];
       }
 
       final data = json.decode(response.body);
+      print('📦 Raw API response: ${data.toString()}');
+      
       List<Map<String, dynamic>> plans = [];
       
+      // Try different response formats
       if (data['plans'] is List) {
         plans = List<Map<String, dynamic>>.from(data['plans']);
-      } else if (data['data'] is List) {
-        plans = List<Map<String, dynamic>>.from(data['data']);
+      } else if (data['data'] != null) {
+        if (data['data'] is List) {
+          plans = List<Map<String, dynamic>>.from(data['data']);
+        } else if (data['data'] is Map && data['data']['plans'] is List) {
+          plans = List<Map<String, dynamic>>.from(data['data']['plans']);
+        }
       } else if (data is List) {
         plans = List<Map<String, dynamic>>.from(data);
       }
 
-      if (activeOnly) {
+      // Apply active filter if needed
+      if (activeOnly && plans.isNotEmpty) {
+        final beforeFilter = plans.length;
         plans = plans.where((plan) => 
           plan['is_active'] == true || 
           plan['active'] == true ||
-          plan['status'] == 'active'
+          plan['status'] == 'active' ||
+          plan['isActive'] == true
         ).toList();
+        if (beforeFilter != plans.length) {
+          print('📋 Filtered from $beforeFilter to ${plans.length} active plans');
+        }
       }
 
       print('✅ Fetched ${plans.length} subscription plans');
       return plans;
     } catch (e) {
       print('❌ Get subscription plans error: $e');
+      print('💡 Check:');
+      print('   1. Is backend server running?');
+      print('   2. Is endpoint /api/mobile/subscription/plans correct?');
+      print('   3. Check console for connection errors');
       return [];
     }
   }
