@@ -117,15 +117,22 @@ class ApiClient {
     return testModeEnabled;
   }
 
-  /// Get headers with JWT token
-  static Map<String, String> _getHeaders(
-      {Map<String, String>? additionalHeaders}) {
+  /// Get headers with JWT token (only if authenticated)
+  /// ✅ Registration endpoint should NOT include JWT token
+  static Map<String, String> _getHeaders({
+    Map<String, String>? additionalHeaders,
+    bool includeAuth = true, // Default to true for backward compatibility
+  }) {
     final headers = {
       'Content-Type': 'application/json',
       ...?additionalHeaders,
     };
 
-    if (_jwtToken != null && _jwtToken!.isNotEmpty) {
+    // Only add Authorization header if:
+    // 1. includeAuth is true (default)
+    // 2. JWT token exists
+    // This ensures registration doesn't send JWT token
+    if (includeAuth && _jwtToken != null && _jwtToken!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_jwtToken';
     }
 
@@ -190,51 +197,30 @@ class ApiClient {
   /// Generic GET request
   static Future<http.Response?> get(String endpoint,
       {bool requireAuth = false}) async {
-    // Check test mode - bypass authentication if enabled
-    final testMode = await isTestMode();
-    if (requireAuth && !isAuthenticated && !testMode) {
-      // ✅ DEVELOPMENT BYPASS: Auto-enable test mode if backend unavailable
+    // ✅ LIVE MODE: Always use real backend - no test mode bypass
+    if (requireAuth && !isAuthenticated) {
       final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
       if (baseUrl == null) {
-        print('⚠️ No backend available - Auto-enabling test mode for development');
-        final prefs = await SharedPreferences.getInstance();
-        if (!const bool.fromEnvironment('dart.vm.product')) {
-          await prefs.setBool('test_mode', true);
-          print('🧪 Test mode auto-enabled - Skipping backend for GET $endpoint');
-          return null; // Services will use dummy data
-        }
-        // In production, throw error instead of using test mode
         throw Exception('No backend server available');
       }
       throw Exception('Authentication required');
     }
-    
-    // In test mode, skip backend connection check
-    if (testMode) {
-      print('🧪 Test mode: Skipping backend connection check for GET $endpoint');
-      // Return null to indicate no backend (services will use dummy data)
-      return null;
-    }
 
     final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
     if (baseUrl == null) {
-      // ✅ DEVELOPMENT BYPASS: Auto-enable test mode if backend unavailable
-      print('⚠️ No backend available - Auto-enabling test mode for development');
-      final prefs = await SharedPreferences.getInstance();
-      if (!const bool.fromEnvironment('dart.vm.product')) {
-        await prefs.setBool('test_mode', true);
-        print('🧪 Test mode auto-enabled - Services will use dummy data');
-      }
-      return null; // Services will use dummy data instead of throwing
+      throw Exception('No backend server available');
     }
 
     try {
       print('📤 GET $baseUrl$endpoint');
       
+      // ✅ Only include auth if endpoint requires it
+      final includeAuth = requireAuth;
+      
       final response = await http
           .get(
             Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(),
+            headers: _getHeaders(includeAuth: includeAuth),
           )
           .timeout(const Duration(seconds: 10));
 
@@ -261,55 +247,46 @@ class ApiClient {
     bool requireAuth = false,
     Map<String, String>? additionalHeaders,
   }) async {
-    // Check test mode - bypass authentication if enabled
-    final testMode = await isTestMode();
-    if (requireAuth && !isAuthenticated && !testMode) {
-      // ✅ DEVELOPMENT BYPASS: Auto-enable test mode if backend unavailable
+    // ✅ LIVE MODE: Always use real backend - no test mode bypass
+    if (requireAuth && !isAuthenticated) {
       final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
       if (baseUrl == null) {
-        print('⚠️ No backend available - Auto-enabling test mode for development');
-        final prefs = await SharedPreferences.getInstance();
-        if (!const bool.fromEnvironment('dart.vm.product')) {
-          await prefs.setBool('test_mode', true);
-        }
-        print('🧪 Test mode auto-enabled - Skipping backend for POST $endpoint');
-        return null; // Services will use dummy data
+        throw Exception('No backend server available');
       }
       throw Exception('Authentication required');
-    }
-    
-    // In test mode, skip backend connection check
-    if (testMode) {
-      print('🧪 Test mode: Skipping backend connection check for POST $endpoint');
-      // Return null to indicate no backend (services will use dummy data)
-      return null;
     }
 
     final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
     if (baseUrl == null) {
-      // ✅ DEVELOPMENT BYPASS: Auto-enable test mode if backend unavailable
-      print('⚠️ No backend available - Auto-enabling test mode for development');
-      final prefs = await SharedPreferences.getInstance();
-      if (!const bool.fromEnvironment('dart.vm.product')) {
-        await prefs.setBool('test_mode', true);
-        print('🧪 Test mode auto-enabled - Services will use dummy data');
-      }
-      return null; // Services will use dummy data instead of throwing
+      throw Exception('No backend server available');
     }
 
     try {
-      print('📤 POST $baseUrl$endpoint');
+      final fullUrl = '$baseUrl$endpoint';
+      print('📤 POST $fullUrl');
       print('📤 Request body: ${json.encode(body)}');
+      
+      // ✅ Registration endpoint should NOT send JWT token
+      final includeAuth = requireAuth; // Only include auth if endpoint requires it
+      final headers = _getHeaders(
+        additionalHeaders: additionalHeaders,
+        includeAuth: includeAuth, // Don't send JWT for public endpoints
+      );
+      
+      print('📤 Request headers: $headers');
+      print('📤 requireAuth: $requireAuth, includeAuth: $includeAuth');
+      print('📤 JWT token present: ${_jwtToken != null && _jwtToken!.isNotEmpty}');
       
       final response = await http
           .post(
-            Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(additionalHeaders: additionalHeaders),
+            Uri.parse(fullUrl),
+            headers: headers,
             body: json.encode(body),
           )
           .timeout(const Duration(seconds: 10));
 
       print('📥 Response status: ${response.statusCode}');
+      print('📥 Response headers: ${response.headers}');
       print('📥 Response body: ${response.body}');
       
       return response;
@@ -329,50 +306,31 @@ class ApiClient {
     dynamic body, {
     bool requireAuth = false,
   }) async {
-    // Check test mode - bypass authentication if enabled
-    final testMode = await isTestMode();
-    if (requireAuth && !isAuthenticated && !testMode) {
-      // ✅ DEVELOPMENT BYPASS: Auto-enable test mode if backend unavailable
+    // ✅ LIVE MODE: Always use real backend - no test mode bypass
+    if (requireAuth && !isAuthenticated) {
       final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
       if (baseUrl == null) {
-        print('⚠️ No backend available - Auto-enabling test mode for development');
-        final prefs = await SharedPreferences.getInstance();
-        if (!const bool.fromEnvironment('dart.vm.product')) {
-          await prefs.setBool('test_mode', true);
-        }
-        print('🧪 Test mode auto-enabled - Skipping backend for PUT $endpoint');
-        return null; // Services will use dummy data
+        throw Exception('No backend server available');
       }
       throw Exception('Authentication required');
-    }
-    
-    // In test mode, skip backend connection check
-    if (testMode) {
-      print('🧪 Test mode: Skipping backend connection check for PUT $endpoint');
-      // Return null to indicate no backend (services will handle gracefully)
-      return null;
     }
 
     final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
     if (baseUrl == null) {
-      // ✅ DEVELOPMENT BYPASS: Auto-enable test mode if backend unavailable
-      print('⚠️ No backend available - Auto-enabling test mode for development');
-      final prefs = await SharedPreferences.getInstance();
-      if (!const bool.fromEnvironment('dart.vm.product')) {
-        await prefs.setBool('test_mode', true);
-        print('🧪 Test mode auto-enabled - Services will use dummy data');
-      }
-      return null; // Services will use dummy data instead of throwing
+      throw Exception('No backend server available');
     }
 
     try {
       print('📤 PUT $baseUrl$endpoint');
       print('📤 Request body: ${json.encode(body)}');
       
+      // ✅ Only include auth if endpoint requires it
+      final includeAuth = requireAuth;
+      
       final response = await http
           .put(
             Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(),
+            headers: _getHeaders(includeAuth: includeAuth),
             body: json.encode(body),
           )
           .timeout(const Duration(seconds: 10));
@@ -408,10 +366,13 @@ class ApiClient {
     }
 
     try {
+      // ✅ Only include auth if endpoint requires it
+      final includeAuth = requireAuth;
+      
       final response = await http
           .delete(
             Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(),
+            headers: _getHeaders(includeAuth: includeAuth),
           )
           .timeout(const Duration(seconds: 10));
 

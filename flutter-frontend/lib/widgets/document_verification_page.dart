@@ -36,10 +36,10 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
     });
 
     try {
-      // Load verification status
+      // Load verification status (now handles errors gracefully)
       final status = await DocumentVerificationService.getVerificationStatus();
       
-      // Load documents list
+      // Load documents list (now handles errors gracefully)
       final documents = await DocumentVerificationService.getDocuments();
 
       if (mounted) {
@@ -47,13 +47,26 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
           _verificationStatus = status;
           _documents = documents;
           _isLoading = false;
+          // Clear error if we got a response (even if it's default status)
+          _error = null;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          // Only show error if it's a critical error
+          // getVerificationStatus now returns default status instead of throwing
+          _error = e.toString().contains('Authentication required') 
+              ? 'Please log in to view verification status'
+              : null;
           _isLoading = false;
+          // Set default status if error occurred
+          if (_verificationStatus == null) {
+            _verificationStatus = {
+              'document_status': 'no_document',
+              'message': 'Unable to load verification status',
+            };
+          }
         });
       }
     }
@@ -129,7 +142,7 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
       backgroundColor: tealColor,
       appBar: AppBar(
         title: const Text(
-          'Document Verification',
+          'Business Verification',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -244,6 +257,72 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
                                     ),
                                   ),
                                 ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Instructions Card
+                        Card(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          color: lightTeal,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Business Verification',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: tealColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Please upload your Certificate of Incorporation (or Formation) issued by your state\'s Secretary of State.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Color(0xFF0F172A),
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: tealColor.withOpacity(0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: tealColor,
+                                        size: 20,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          '(Optional) You may also upload your IRS EIN Confirmation Letter for faster verification.',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Color(0xFF64748B),
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),

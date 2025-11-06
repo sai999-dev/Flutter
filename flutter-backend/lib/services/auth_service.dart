@@ -25,13 +25,16 @@ class AuthService {
         ...?additionalData,
       };
 
+      // ✅ Registration is a public endpoint - no authentication required
       final response = await ApiClient.post(
         '/api/mobile/auth/register',
         body,
+        requireAuth: false, // Explicitly set to false - registration is public
       );
 
       if (response == null) {
-        throw Exception('No response from server');
+        // ✅ LIVE MODE: Always require real backend - no test mode fallback
+        throw Exception('No response from server - Backend server is not running');
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -40,23 +43,48 @@ class AuthService {
         print('📋 Response data: $decoded');
         return decoded;
       } else {
-        // Handle error response
+        // Handle error response with detailed logging
         String errorMessage = 'Registration failed';
+        Map<String, dynamic>? errorData;
+        
         try {
-          final errorData = json.decode(response.body);
+          errorData = json.decode(response.body) as Map<String, dynamic>;
           errorMessage = (errorData['message'] ?? 
               errorData['error'] ?? 
               errorData['msg'] ??
+              errorData['errorMessage'] ??
               'Registration failed').toString();
+          
           print('❌ Registration failed: $errorMessage');
           print('❌ Status code: ${response.statusCode}');
-          print('❌ Response body: ${response.body}');
+          print('❌ Full error response: ${response.body}');
+          print('❌ Error data: $errorData');
+          
+          // Include additional error details if available
+          if (errorData.containsKey('errors')) {
+            print('❌ Validation errors: ${errorData['errors']}');
+          }
+          if (errorData.containsKey('details')) {
+            print('❌ Error details: ${errorData['details']}');
+          }
         } catch (parseError) {
-          // If response body is not JSON, use status code
+          // If response body is not JSON, use status code and raw body
           errorMessage = 'Registration failed (Status: ${response.statusCode})';
-          print('❌ Registration failed - Invalid JSON response: ${response.body}');
+          if (response.body.isNotEmpty) {
+            errorMessage += ': ${response.body}';
+          }
+          print('❌ Registration failed - Invalid JSON response');
+          print('❌ Status code: ${response.statusCode}');
+          print('❌ Raw response body: ${response.body}');
+          print('❌ Parse error: $parseError');
         }
-        throw Exception(errorMessage);
+        
+        // Create detailed error message
+        final detailedError = errorData != null && errorData.containsKey('errors')
+            ? '$errorMessage\n\nDetails: ${errorData['errors']}'
+            : errorMessage;
+        
+        throw Exception(detailedError);
       }
     } catch (e) {
       print('❌ Registration error: $e');
