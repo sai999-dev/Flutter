@@ -1,18 +1,20 @@
 import 'dart:convert';
 import 'api_client.dart';
 
-/// Subscription Management Service (Self-Service)
-/// Implements all /api/mobile/subscription/* endpoints for agency self-service
+/// Subscription Management Service
+/// Fetches plans from Super Admin Portal API endpoint
+/// Architecture: Mobile App → Middleware Layer → Super Admin Portal API
 class SubscriptionService {
-  /// Get all available subscription plans
+  /// Get all available subscription plans from Super Admin Portal
   /// GET /api/mobile/subscription/plans
+  /// This endpoint connects to the Super Admin Portal backend that manages plan configuration
   static Future<List<Map<String, dynamic>>> getPlans({
     bool activeOnly = true,
   }) async {
-    print('📦 Fetching subscription plans...');
+    print('📦 Fetching subscription plans from Super Admin Portal...');
 
     try {
-      // Build endpoint with query parameter if needed
+      // Build endpoint - connects to middleware which fetches from Super Admin Portal
       String endpoint = '/api/mobile/subscription/plans';
       if (activeOnly) {
         endpoint += '?isActive=true';
@@ -20,7 +22,7 @@ class SubscriptionService {
       
       final response = await ApiClient.get(
         endpoint,
-        requireAuth: false, // Plans are typically public
+        requireAuth: false, // Plans are public for registration
       );
 
       if (response == null) {

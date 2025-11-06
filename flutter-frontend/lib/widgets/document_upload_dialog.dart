@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_backend/services/document_verification_service.dart';
 import 'package:path/path.dart' as path;
+import 'package:image_picker/image_picker.dart';
 
 /// Document Upload Dialog
 /// Shown after registration to upload company verification document
@@ -27,6 +28,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
   final _descriptionController = TextEditingController();
   bool _isUploading = false;
   String? _uploadError;
+  final ImagePicker _picker = ImagePicker();
 
   final List<Map<String, String>> _documentTypes = [
     {'value': 'business_license', 'label': 'Business License'},
@@ -60,6 +62,29 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
     }
   }
 
+  Future<void> _capturePhoto() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 85,
+      );
+      if (image != null && mounted) {
+        setState(() {
+          _selectedFilePath = image.path;
+          _selectedFileName = path.basename(image.path);
+          _uploadError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _uploadError = 'Failed to capture photo: $e';
+        });
+      }
+    }
+  }
+
   Future<void> _uploadDocument() async {
     if (_selectedFilePath == null) {
       setState(() {
@@ -86,7 +111,8 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Document uploaded successfully! Awaiting admin review.'),
+            content: Text(
+                '✅ Document uploaded successfully! Awaiting admin review.'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 3),
           ),
@@ -215,14 +241,34 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               ),
               const SizedBox(height: 16),
 
-              // File Picker
+              // File/Scan/Camera Options
               const Text(
-                'Select Document',
+                'Select or Capture Document',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: tealColor,
                 ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isUploading ? null : _capturePhoto,
+                      icon: const Icon(Icons.photo_camera),
+                      label: const Text('Take Photo'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _isUploading ? null : _pickDocument,
+                      icon: const Icon(Icons.attach_file),
+                      label: const Text('Pick File'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               GestureDetector(
@@ -281,7 +327,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Supported formats: PDF, PNG, JPG, JPEG (Max 10MB)',
+                'Supported: PDF, PNG, JPG, JPEG (Max 10MB). You can also use your camera to capture a document.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
@@ -333,12 +379,14 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.error_outline, color: Colors.red[700], size: 20),
+                      Icon(Icons.error_outline,
+                          color: Colors.red[700], size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _uploadError!,
-                          style: TextStyle(color: Colors.red[700], fontSize: 13),
+                          style:
+                              TextStyle(color: Colors.red[700], fontSize: 13),
                         ),
                       ),
                     ],
@@ -416,4 +464,3 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
     );
   }
 }
-
