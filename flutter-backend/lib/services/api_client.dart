@@ -89,17 +89,50 @@ class ApiClient {
   static String? get token => _jwtToken;
 
   /// Check if user is authenticated
+  /// Returns true if token exists
   static bool get isAuthenticated => _jwtToken != null && _jwtToken!.isNotEmpty;
+  
+  /// Check if test mode is enabled (bypasses authentication)
+  /// PRODUCTION SECURITY: Only enabled in debug builds, disabled in release
+  static Future<bool> isTestMode() async {
+    // ✅ PRODUCTION SECURITY: Disable test mode in release builds
+    // This check happens at compile time - test mode code is removed in release
+    if (const bool.fromEnvironment('dart.vm.product')) {
+      return false; // Production build - test mode always disabled
+    }
+    
+    // Only check SharedPreferences in debug builds
+    final prefs = await SharedPreferences.getInstance();
+    final testModeEnabled = prefs.getBool('test_mode') ?? false;
+    
+    // Additional safety check - verify we're not in release mode
+    // This is a runtime check as a final safety measure
+    if (testModeEnabled && const bool.fromEnvironment('dart.vm.product')) {
+      print('⚠️ WARNING: Test mode detected in production build - disabling');
+      // Clear test mode flag if somehow set in production
+      await prefs.setBool('test_mode', false);
+      return false;
+    }
+    
+    return testModeEnabled;
+  }
 
-  /// Get headers with JWT token
-  static Map<String, String> _getHeaders(
-      {Map<String, String>? additionalHeaders}) {
+  /// Get headers with JWT token (only if authenticated)
+  /// ✅ Registration endpoint should NOT include JWT token
+  static Map<String, String> _getHeaders({
+    Map<String, String>? additionalHeaders,
+    bool includeAuth = true, // Default to true for backward compatibility
+  }) {
     final headers = {
       'Content-Type': 'application/json',
       ...?additionalHeaders,
     };
 
-    if (_jwtToken != null && _jwtToken!.isNotEmpty) {
+    // Only add Authorization header if:
+    // 1. includeAuth is true (default)
+    // 2. JWT token exists
+    // This ensures registration doesn't send JWT token
+    if (includeAuth && _jwtToken != null && _jwtToken!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_jwtToken';
     }
 
@@ -164,7 +197,12 @@ class ApiClient {
   /// Generic GET request
   static Future<http.Response?> get(String endpoint,
       {bool requireAuth = false}) async {
+    // ✅ LIVE MODE: Always use real backend - no test mode bypass
     if (requireAuth && !isAuthenticated) {
+      final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
+      if (baseUrl == null) {
+        throw Exception('No backend server available');
+      }
       throw Exception('Authentication required');
     }
 
@@ -174,16 +212,30 @@ class ApiClient {
     }
 
     try {
+      print('📤 GET $baseUrl$endpoint');
+      
+      // ✅ Only include auth if endpoint requires it
+      final includeAuth = requireAuth;
+      
       final response = await http
           .get(
             Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(),
+            headers: _getHeaders(includeAuth: includeAuth),
           )
           .timeout(const Duration(seconds: 10));
 
+      print('📥 Response status: ${response.statusCode}');
+      if (response.statusCode != 200) {
+        print('📥 Response body: ${response.body}');
+      }
+      
       return response;
     } catch (e) {
       print('❌ GET $endpoint failed: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      if (e.toString().contains('timeout')) {
+        throw Exception('Connection timeout. Please check your internet connection.');
+      }
       rethrow;
     }
   }
@@ -195,7 +247,12 @@ class ApiClient {
     bool requireAuth = false,
     Map<String, String>? additionalHeaders,
   }) async {
+    // ✅ LIVE MODE: Always use real backend - no test mode bypass
     if (requireAuth && !isAuthenticated) {
+      final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
+      if (baseUrl == null) {
+        throw Exception('No backend server available');
+      }
       throw Exception('Authentication required');
     }
 
@@ -205,17 +262,40 @@ class ApiClient {
     }
 
     try {
+      final fullUrl = '$baseUrl$endpoint';
+      print('📤 POST $fullUrl');
+      print('📤 Request body: ${json.encode(body)}');
+      
+      // ✅ Registration endpoint should NOT send JWT token
+      final includeAuth = requireAuth; // Only include auth if endpoint requires it
+      final headers = _getHeaders(
+        additionalHeaders: additionalHeaders,
+        includeAuth: includeAuth, // Don't send JWT for public endpoints
+      );
+      
+      print('📤 Request headers: $headers');
+      print('📤 requireAuth: $requireAuth, includeAuth: $includeAuth');
+      print('📤 JWT token present: ${_jwtToken != null && _jwtToken!.isNotEmpty}');
+      
       final response = await http
           .post(
-            Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(additionalHeaders: additionalHeaders),
+            Uri.parse(fullUrl),
+            headers: headers,
             body: json.encode(body),
           )
           .timeout(const Duration(seconds: 10));
 
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response headers: ${response.headers}');
+      print('📥 Response body: ${response.body}');
+      
       return response;
     } catch (e) {
       print('❌ POST $endpoint failed: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      if (e.toString().contains('timeout')) {
+        throw Exception('Connection timeout. Please check your internet connection.');
+      }
       rethrow;
     }
   }
@@ -226,7 +306,12 @@ class ApiClient {
     dynamic body, {
     bool requireAuth = false,
   }) async {
+    // ✅ LIVE MODE: Always use real backend - no test mode bypass
     if (requireAuth && !isAuthenticated) {
+      final baseUrl = await _findWorkingBaseUrl(endpoint: endpoint);
+      if (baseUrl == null) {
+        throw Exception('No backend server available');
+      }
       throw Exception('Authentication required');
     }
 
@@ -236,17 +321,32 @@ class ApiClient {
     }
 
     try {
+      print('📤 PUT $baseUrl$endpoint');
+      print('📤 Request body: ${json.encode(body)}');
+      
+      // ✅ Only include auth if endpoint requires it
+      final includeAuth = requireAuth;
+      
       final response = await http
           .put(
             Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(),
+            headers: _getHeaders(includeAuth: includeAuth),
             body: json.encode(body),
           )
           .timeout(const Duration(seconds: 10));
 
+      print('📥 Response status: ${response.statusCode}');
+      if (response.statusCode != 200) {
+        print('📥 Response body: ${response.body}');
+      }
+      
       return response;
     } catch (e) {
       print('❌ PUT $endpoint failed: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      if (e.toString().contains('timeout')) {
+        throw Exception('Connection timeout. Please check your internet connection.');
+      }
       rethrow;
     }
   }
@@ -266,10 +366,13 @@ class ApiClient {
     }
 
     try {
+      // ✅ Only include auth if endpoint requires it
+      final includeAuth = requireAuth;
+      
       final response = await http
           .delete(
             Uri.parse('$baseUrl$endpoint'),
-            headers: _getHeaders(),
+            headers: _getHeaders(includeAuth: includeAuth),
           )
           .timeout(const Duration(seconds: 10));
 

@@ -77,6 +77,9 @@ dependencies:
   
   # Charts & Analytics
   fl_chart: ^0.66.0
+  
+  # Payments
+  flutter_stripe: ^10.0.0
 
 dev_dependencies:
   flutter_test:

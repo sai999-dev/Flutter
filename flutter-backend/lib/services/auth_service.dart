@@ -25,28 +25,70 @@ class AuthService {
         ...?additionalData,
       };
 
+      // ✅ Registration is a public endpoint - no authentication required
       final response = await ApiClient.post(
         '/api/mobile/auth/register',
         body,
+        requireAuth: false, // Explicitly set to false - registration is public
       );
 
       if (response == null) {
-        throw Exception('No response from server');
+        // ✅ LIVE MODE: Always require real backend - no test mode fallback
+        throw Exception('No response from server - Backend server is not running');
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         print('✅ Registration successful');
+        print('📋 Response data: $decoded');
         return decoded;
       } else {
-        final errorData = json.decode(response.body);
-        final message = (errorData['message'] ?? 
-            errorData['error'] ?? 
-            'Registration failed').toString();
-        throw Exception(message);
+        // Handle error response with detailed logging
+        String errorMessage = 'Registration failed';
+        Map<String, dynamic>? errorData;
+        
+        try {
+          errorData = json.decode(response.body) as Map<String, dynamic>;
+          errorMessage = (errorData['message'] ?? 
+              errorData['error'] ?? 
+              errorData['msg'] ??
+              errorData['errorMessage'] ??
+              'Registration failed').toString();
+          
+          print('❌ Registration failed: $errorMessage');
+          print('❌ Status code: ${response.statusCode}');
+          print('❌ Full error response: ${response.body}');
+          print('❌ Error data: $errorData');
+          
+          // Include additional error details if available
+          if (errorData.containsKey('errors')) {
+            print('❌ Validation errors: ${errorData['errors']}');
+          }
+          if (errorData.containsKey('details')) {
+            print('❌ Error details: ${errorData['details']}');
+          }
+        } catch (parseError) {
+          // If response body is not JSON, use status code and raw body
+          errorMessage = 'Registration failed (Status: ${response.statusCode})';
+          if (response.body.isNotEmpty) {
+            errorMessage += ': ${response.body}';
+          }
+          print('❌ Registration failed - Invalid JSON response');
+          print('❌ Status code: ${response.statusCode}');
+          print('❌ Raw response body: ${response.body}');
+          print('❌ Parse error: $parseError');
+        }
+        
+        // Create detailed error message
+        final detailedError = errorData != null && errorData.containsKey('errors')
+            ? '$errorMessage\n\nDetails: ${errorData['errors']}'
+            : errorMessage;
+        
+        throw Exception(detailedError);
       }
     } catch (e) {
       print('❌ Registration error: $e');
+      print('❌ Error type: ${e.runtimeType}');
       rethrow;
     }
   }
@@ -116,13 +158,17 @@ class AuthService {
         throw Exception('No response from server');
       }
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
+        print('📋 Login response: $decoded');
 
         // Token is top-level in our API
         final token = decoded['token'];
         if (token != null && token is String && token.isNotEmpty) {
           await ApiClient.saveToken(token);
+          print('✅ JWT token saved');
+        } else {
+          print('⚠️ No token in response');
         }
 
         // Normalize profile: API wraps fields under `data`
@@ -134,18 +180,39 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_profile', json.encode(profile));
         final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
-        await prefs.setString('agency_id', agencyId.toString());
+        if (agencyId.toString().isNotEmpty) {
+          await prefs.setString('agency_id', agencyId.toString());
+          print('✅ Agency ID saved: $agencyId');
+        }
         await prefs.setString('last_login', DateTime.now().toIso8601String());
 
         print('✅ Login successful');
         return decoded;
       } else {
-        final errorData = json.decode(response.body);
-        final message = (errorData['message'] ?? errorData['error'] ?? 'Login failed').toString();
-        throw Exception(message);
+        // Handle error response
+        String errorMessage = 'Login failed';
+        try {
+          final errorData = json.decode(response.body);
+          errorMessage = (errorData['message'] ?? 
+              errorData['error'] ?? 
+              errorData['msg'] ??
+              'Login failed').toString();
+          print('❌ Login failed: $errorMessage');
+          print('❌ Status code: ${response.statusCode}');
+          print('❌ Response body: ${response.body}');
+        } catch (parseError) {
+          // If response body is not JSON, use status code
+          errorMessage = 'Login failed (Status: ${response.statusCode})';
+          print('❌ Login failed - Invalid JSON response: ${response.body}');
+        }
+        throw Exception(errorMessage);
       }
     } catch (e) {
       print('❌ Login error: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      if (e.toString().contains('No backend server available')) {
+        throw Exception('Backend server is not running. Please start the backend server.');
+      }
       rethrow;
     }
   }

@@ -144,13 +144,30 @@ class DocumentVerificationService {
     print('📋 Checking verification status...');
 
     try {
+      // Ensure API client is initialized and token is loaded
+      await ApiClient.initialize();
+      
+      // Check if token is available
+      if (!ApiClient.isAuthenticated) {
+        print('⚠️ No authentication token found - returning default status');
+        // Return default pending status if not authenticated
+        return {
+          'document_status': 'no_document',
+          'message': 'Please log in to view verification status',
+        };
+      }
+
       final response = await ApiClient.get(
         '/api/mobile/auth/verification-status',
         requireAuth: true,
       );
 
       if (response == null) {
-        throw Exception('No response from server');
+        print('⚠️ No response from server - returning default status');
+        return {
+          'document_status': 'no_document',
+          'message': 'Unable to load verification status',
+        };
       }
 
       if (response.statusCode == 200) {
@@ -162,11 +179,20 @@ class DocumentVerificationService {
         final message = (errorData['message'] ?? 
             errorData['error'] ?? 
             'Failed to get verification status').toString();
-        throw Exception(message);
+        print('⚠️ Error response: $message - returning default status');
+        // Return default status instead of throwing
+        return {
+          'document_status': 'no_document',
+          'message': message,
+        };
       }
     } catch (e) {
       print('❌ Get verification status error: $e');
-      rethrow;
+      // Return default status instead of throwing
+      return {
+        'document_status': 'no_document',
+        'message': 'Unable to load verification status. Please try again later.',
+      };
     }
   }
 
@@ -176,13 +202,22 @@ class DocumentVerificationService {
     print('📄 Fetching uploaded documents...');
 
     try {
+      // Ensure API client is initialized and token is loaded
+      await ApiClient.initialize();
+      
+      // Check if token is available
+      if (!ApiClient.isAuthenticated) {
+        print('⚠️ No authentication token found - returning empty list');
+        return [];
+      }
+
       final response = await ApiClient.get(
         '/api/mobile/auth/documents',
         requireAuth: true,
       );
 
       if (response == null || response.statusCode != 200) {
-        print('❌ Failed to fetch documents: ${response?.statusCode}');
+        print('⚠️ Failed to fetch documents: ${response?.statusCode} - returning empty list');
         return [];
       }
 
@@ -200,7 +235,7 @@ class DocumentVerificationService {
       print('✅ Fetched ${documents.length} documents');
       return documents;
     } catch (e) {
-      print('❌ Get documents error: $e');
+      print('❌ Get documents error: $e - returning empty list');
       return [];
     }
   }

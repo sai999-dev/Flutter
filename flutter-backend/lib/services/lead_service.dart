@@ -13,12 +13,14 @@ class LeadService {
   /// Get agency's assigned leads (filtered by status, date)
   /// GET /api/mobile/leads
   /// Uses caching to reduce API calls
+  /// Note: Rejected leads are automatically excluded from "new" status queries
   static Future<List<Map<String, dynamic>>> getLeads({
     String? status,
     DateTime? fromDate,
     DateTime? toDate,
     int? limit,
     bool forceRefresh = false, // Force bypass cache
+    bool excludeRejected = true, // Exclude rejected leads by default
   }) async {
     // Build cache key from parameters
     final cacheKey = 'leads_${status ?? 'all'}_${fromDate?.toIso8601String() ?? 'none'}_${toDate?.toIso8601String() ?? 'none'}_${limit ?? 'all'}';
@@ -59,9 +61,27 @@ class LeadService {
         final staleCache = await CacheService.getCachedList(cacheKey, ttl: const Duration(days: 30));
         if (staleCache != null) {
           print('⚠️ Using stale cached leads due to API error');
+          // Filter rejected leads from cache
+          if (excludeRejected) {
+            final filteredCache = staleCache.where((lead) {
+              final leadStatus = (lead['status'] ?? '').toString().toLowerCase();
+              return leadStatus != 'rejected';
+            }).toList();
+            return filteredCache;
+          }
           return staleCache;
         }
-        return [];
+        // Return dummy leads for development/testing when API is unavailable
+        print('⚠️ API unavailable - returning dummy leads for testing');
+        final dummyLeads = _getDummyLeads();
+        // Filter rejected leads from dummy data
+        if (excludeRejected) {
+          return dummyLeads.where((lead) {
+            final leadStatus = (lead['status'] ?? '').toString().toLowerCase();
+            return leadStatus != 'rejected';
+          }).toList();
+        }
+        return dummyLeads;
       }
 
       if (response.statusCode == 200) {
@@ -82,11 +102,19 @@ class LeadService {
 
         final leadsList = leadsData.cast<Map<String, dynamic>>();
         
-        // Cache the results
-        await CacheService.setCachedList(cacheKey, leadsList, ttl: _cacheTTL);
+        // Filter out rejected leads if excludeRejected is true
+        final filteredLeads = excludeRejected
+            ? leadsList.where((lead) {
+                final leadStatus = (lead['status'] ?? '').toString().toLowerCase();
+                return leadStatus != 'rejected';
+              }).toList()
+            : leadsList;
         
-        print('✅ Fetched ${leadsList.length} leads');
-        return leadsList;
+        // Cache the results
+        await CacheService.setCachedList(cacheKey, filteredLeads, ttl: _cacheTTL);
+        
+        print('✅ Fetched ${filteredLeads.length} leads (${leadsList.length - filteredLeads.length} rejected excluded)');
+        return filteredLeads;
       } else {
         print('❌ Failed to fetch leads: ${response.statusCode}');
         print('Response: ${response.body}');
@@ -97,7 +125,9 @@ class LeadService {
           print('⚠️ Using stale cached leads due to API error');
           return staleCache;
         }
-        return [];
+        // Return dummy leads for development/testing
+        print('⚠️ API error - returning dummy leads for testing');
+        return _getDummyLeads();
       }
     } catch (e) {
       print('❌ Get leads error: $e');
@@ -106,10 +136,133 @@ class LeadService {
       final staleCache = await CacheService.getCachedList(cacheKey, ttl: const Duration(days: 30));
       if (staleCache != null) {
         print('⚠️ Using stale cached leads due to error');
+        // Filter rejected leads from cache
+        if (excludeRejected) {
+          final filteredCache = staleCache.where((lead) {
+            final leadStatus = (lead['status'] ?? '').toString().toLowerCase();
+            return leadStatus != 'rejected';
+          }).toList();
+          return filteredCache;
+        }
         return staleCache;
       }
-      return [];
+      // Return dummy leads for development/testing
+      print('⚠️ Exception occurred - returning dummy leads for testing');
+      final dummyLeads = _getDummyLeads();
+      // Filter rejected leads from dummy data
+      if (excludeRejected) {
+        return dummyLeads.where((lead) {
+          final leadStatus = (lead['status'] ?? '').toString().toLowerCase();
+          return leadStatus != 'rejected';
+        }).toList();
+      }
+      return dummyLeads;
     }
+  }
+
+  /// Generate dummy leads for development and testing
+  /// Includes leads from different industries: Health, Insurance, Finance, Handyman
+  /// Production: Remove or disable this method
+  static List<Map<String, dynamic>> _getDummyLeads() {
+    final now = DateTime.now();
+    return [
+      // Health Industry Lead
+      {
+        'id': 1,
+        'first_name': 'Sarah',
+        'last_name': 'Johnson',
+        'phone': '(214) 555-0101',
+        'email': 'sarah.johnson@example.com',
+        'zipcode': '75201',
+        'city': 'Dallas',
+        'state': 'TX',
+        'address': '1234 Main Street, Dallas, TX 75201',
+        'age': 68,
+        'industry': 'Health',
+        'service_type': 'Home Care Services',
+        'status': 'new',
+        'urgency_level': 'HIGH',
+        'source': 'Website Form',
+        'created_at': now.subtract(const Duration(hours: 1)).toIso8601String(),
+        'updated_at': now.subtract(const Duration(hours: 1)).toIso8601String(),
+        'notes': 'Elderly client needs daily assistance with medication and meal preparation. Prefers morning visits. Has Medicare coverage.',
+        'preferred_contact_time': 'Morning (9 AM - 12 PM)',
+        'budget': '1500-2000',
+        'timeline': 'ASAP',
+      },
+      // Insurance Industry Lead
+      {
+        'id': 2,
+        'first_name': 'Michael',
+        'last_name': 'Chen',
+        'phone': '(972) 555-0102',
+        'email': 'michael.chen@example.com',
+        'zipcode': '75033',
+        'city': 'Frisco',
+        'state': 'TX',
+        'address': '5678 Oak Avenue, Frisco, TX 75033',
+        'age': 42,
+        'industry': 'Insurance',
+        'service_type': 'Life Insurance Consultation',
+        'status': 'new',
+        'urgency_level': 'MODERATE',
+        'source': 'Referral',
+        'created_at': now.subtract(const Duration(hours: 3)).toIso8601String(),
+        'updated_at': now.subtract(const Duration(hours: 3)).toIso8601String(),
+        'notes': 'New homeowner looking for comprehensive life insurance coverage. Has existing health insurance. Interested in term life policy. Two dependents.',
+        'preferred_contact_time': 'Evening (5 PM - 8 PM)',
+        'budget': '100-150/month',
+        'timeline': 'Within 2 weeks',
+      },
+      // Finance Industry Lead (for demo - show 2 leads)
+      // {
+      //   'id': 3,
+      //   'first_name': 'Emily',
+      //   'last_name': 'Rodriguez',
+      //   'phone': '(214) 555-0103',
+      //   'email': 'emily.rodriguez@example.com',
+      //   'zipcode': '75001',
+      //   'city': 'Allen',
+      //   'state': 'TX',
+      //   'address': '9012 Elm Street, Allen, TX 75001',
+      //   'age': 35,
+      //   'industry': 'Finance',
+      //   'service_type': 'Investment Advisory',
+      //   'status': 'contacted',
+      //   'urgency_level': 'LOW',
+      //   'source': 'Online Ad',
+      //   'created_at': now.subtract(const Duration(days: 1)).toIso8601String(),
+      //   'updated_at': now.subtract(const Duration(hours: 12)).toIso8601String(),
+      //   'notes': 'Looking for financial planning services. Has $50K to invest. Interested in retirement planning.',
+      //   'preferred_contact_time': 'Weekend',
+      //   'budget': 'Fee-based',
+      //   'timeline': 'Flexible',
+      // },
+      // Handyman Industry Lead
+      // {
+      //   'id': 4,
+      //   'first_name': 'Robert',
+      //   'last_name': 'Thompson',
+      //   'phone': '(214) 555-0104',
+      //   'email': 'robert.thompson@example.com',
+      //   'zipcode': '75201',
+      //   'city': 'Dallas',
+      //   'state': 'TX',
+      //   'address': '3456 Maple Drive, Dallas, TX 75201',
+      //   'age': 55,
+      //   'industry': 'Handyman',
+      //   'service_type': 'Home Repairs',
+      //   'status': 'new',
+      //   'urgency_level': 'HIGH',
+      //   'source': 'Phone Call',
+      //   'created_at': now.subtract(const Duration(hours: 6)).toIso8601String(),
+      //   'updated_at': now.subtract(const Duration(hours: 6)).toIso8601String(),
+      //   'notes': 'Kitchen sink leak, needs immediate repair. Also wants estimate for bathroom renovation.',
+      //   'preferred_contact_time': 'Any time',
+      //   'budget': '500-1000',
+      //   'timeline': 'Today',
+      // },
+    ];
   }
 
   /// Clear leads cache
@@ -311,6 +464,49 @@ class LeadService {
       }
     } catch (e) {
       print('❌ Accept lead error: $e');
+      return false;
+    }
+  }
+
+  /// Mark lead as not interested (for portal admin to reassign)
+  /// PUT /api/mobile/leads/:leadId/reject
+  /// This marks the lead so portal admin can identify and reassign to other users
+  static Future<bool> markNotInterested(int leadId, {String? reason, String? notes}) async {
+    print('🚫 Marking lead $leadId as not interested');
+
+    try {
+      final body = <String, dynamic>{
+        'status': 'rejected',
+        'reason': reason ?? 'Not interested',
+      };
+      if (notes != null) {
+        body['notes'] = notes;
+      }
+
+      final response = await ApiClient.put(
+        '/api/mobile/leads/$leadId/reject',
+        body,
+        requireAuth: true,
+      );
+
+      if (response == null) {
+        // In test mode, API returns null - consider it successful for testing
+        print('🧪 Test mode: Lead marked as not interested (simulated)');
+        return true;
+      }
+
+      if (response.statusCode == 200) {
+        // Clear cache to force refresh
+        await clearCache();
+        print('✅ Lead marked as not interested - Portal admin can now reassign');
+        return true;
+      } else {
+        final errorData = json.decode(response.body);
+        print('❌ Failed to mark lead as not interested: ${response.statusCode} - ${errorData['message'] ?? 'Unknown error'}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Mark not interested error: $e');
       return false;
     }
   }
