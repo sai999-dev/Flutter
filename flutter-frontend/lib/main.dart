@@ -28,10 +28,16 @@ import 'widgets/document_verification_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Clear cached API URL to force fresh detection
-  await ApiClient.clearCachedUrl();
+  try {
+    // Clear cached API URL to force fresh detection
+    await ApiClient.clearCachedUrl();
 
-  await ApiClient.initialize();
+    await ApiClient.initialize();
+  } catch (e) {
+    // If initialization fails, continue anyway - app can work offline
+    print('⚠️ API Client initialization warning: $e');
+  }
+  
   runApp(const HealthcareApp());
 }
 
