@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform, kReleaseMode, kDebugMode;
+    show
+        kIsWeb,
+        defaultTargetPlatform,
+        TargetPlatform,
+        kReleaseMode,
+        kDebugMode;
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'stripe_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,7 +36,7 @@ void main() async {
 
   // Clear cached API URL to force fresh detection
   await ApiClient.clearCachedUrl();
-  
+
   // ✅ DISABLE TEST MODE - Use live backend
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool('test_mode', false);
@@ -39,7 +44,9 @@ void main() async {
 
   // Initialize Stripe (publishable key only) - with error handling
   // Only initialize on mobile platforms (iOS/Android) - skip on web/desktop
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android)) {
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android)) {
     try {
       stripe.Stripe.publishableKey = StripeConfig.publishableKey;
       stripe.Stripe.merchantIdentifier = StripeConfig.merchantIdentifier;
@@ -51,12 +58,13 @@ void main() async {
       print('⚠️ App will continue without Stripe payment features');
     }
   } else {
-    print('ℹ️ Skipping Stripe initialization on ${kIsWeb ? "web" : defaultTargetPlatform} platform');
+    print(
+        'ℹ️ Skipping Stripe initialization on ${kIsWeb ? "web" : defaultTargetPlatform} platform');
   }
 
   // Initialize API client
   try {
-  await ApiClient.initialize();
+    await ApiClient.initialize();
     print('✅ API client initialized successfully');
   } catch (e) {
     print('⚠️ API client initialization warning: $e');
@@ -185,7 +193,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-
   @override
   void dispose() {
     _emailController.dispose();
@@ -198,7 +205,7 @@ class _LoginPageState extends State<LoginPage> {
     const tealColor = Color(0xFF00888C);
     const lightTeal = Color(0xFFE0F7F7);
     const darkTeal = Color(0xFF006A6E);
-    
+
     return Scaffold(
       backgroundColor: tealColor,
       body: Center(
@@ -358,15 +365,15 @@ class _LoginPageState extends State<LoginPage> {
                               height: 56,
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _login,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: tealColor,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: tealColor,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 4,
+                                  shadowColor: tealColor.withOpacity(0.4),
                                 ),
-                                elevation: 4,
-                                shadowColor: tealColor.withOpacity(0.4),
-                              ),
                                 child: _isLoading
                                     ? const SizedBox(
                                         width: 24,
@@ -450,13 +457,13 @@ class _LoginPageState extends State<LoginPage> {
       final token = response['token'];
       if (token != null && token is String && token.isNotEmpty) {
         await ApiClient.saveToken(token);
-          print('✅ Auth token saved');
-        }
+        print('✅ Auth token saved');
+      }
 
-        // ✅ SAVE LOGIN STATE
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('is_logged_in', true);
-        await prefs.setString('last_login', DateTime.now().toIso8601String());
+      // ✅ SAVE LOGIN STATE
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('last_login', DateTime.now().toIso8601String());
 
       // Save user data from backend response
       final profile = response['data'] is Map<String, dynamic>
@@ -483,59 +490,59 @@ class _LoginPageState extends State<LoginPage> {
       // Save email
       await prefs.setString('user_email', _emailController.text);
 
-        // ✅ SAVE REMEMBER ME
-        if (_rememberMe) {
-          await prefs.setBool('remember_me', true);
-          await prefs.setString('saved_email', _emailController.text);
-        } else {
-          await prefs.remove('remember_me');
-          await prefs.remove('saved_email');
-        }
+      // ✅ SAVE REMEMBER ME
+      if (_rememberMe) {
+        await prefs.setBool('remember_me', true);
+        await prefs.setString('saved_email', _emailController.text);
+      } else {
+        await prefs.remove('remember_me');
+        await prefs.remove('saved_email');
+      }
 
-        // Register device for push notifications
-        try {
-          final platform = kIsWeb
-              ? 'web'
-              : (defaultTargetPlatform == TargetPlatform.android
-                  ? 'android'
-                  : (defaultTargetPlatform == TargetPlatform.iOS
-                      ? 'ios'
-                      : 'other'));
-          await AuthService.registerDevice(
-            deviceToken:
-                'device_${DateTime.now().millisecondsSinceEpoch}', // Replace with actual FCM token
-            platform: platform,
-          );
-        } catch (e) {
-          print('Device registration failed: $e');
-        }
+      // Register device for push notifications
+      try {
+        final platform = kIsWeb
+            ? 'web'
+            : (defaultTargetPlatform == TargetPlatform.android
+                ? 'android'
+                : (defaultTargetPlatform == TargetPlatform.iOS
+                    ? 'ios'
+                    : 'other'));
+        await AuthService.registerDevice(
+          deviceToken:
+              'device_${DateTime.now().millisecondsSinceEpoch}', // Replace with actual FCM token
+          platform: platform,
+        );
+      } catch (e) {
+        print('Device registration failed: $e');
+      }
 
-        // ✅ Sync zipcodes from backend after login
-        try {
-          await TerritoryService.syncZipcodes();
-        } catch (e) {
-          print('Zipcode sync failed: $e');
-        }
+      // ✅ Sync zipcodes from backend after login
+      try {
+        await TerritoryService.syncZipcodes();
+      } catch (e) {
+        print('Zipcode sync failed: $e');
+      }
 
       final savedUserName =
-            prefs.getString('user_name') ?? _emailController.text.split('@')[0];
+          prefs.getString('user_name') ?? _emailController.text.split('@')[0];
 
-        setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
               '🎉 Welcome back, $savedUserName! Let\'s find great leads today!'),
-            backgroundColor: const Color(0xFF00888C),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+          backgroundColor: const Color(0xFF00888C),
+          duration: const Duration(seconds: 3),
+        ),
+      );
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-              builder: (context) => const HomePage(initialZipcodes: null)),
-        );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+            builder: (context) => const HomePage(initialZipcodes: null)),
+      );
     } catch (e) {
       setState(() => _isLoading = false);
 
@@ -803,6 +810,7 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
   final _contactNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  String? _selectedIndustry; // Industry dropdown selection
 
   // Step 2: Plan Selection
   String? _selectedPlanId;
@@ -988,6 +996,12 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
         );
         return;
       }
+      if (_selectedIndustry == null || _selectedIndustry!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select your industry')),
+        );
+        return;
+      }
     } else if (_currentStep == 1) {
       // Step 2: Plan Selection - automatically valid, has default value
     } else if (_currentStep == 2) {
@@ -1101,34 +1115,34 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
     try {
       final info = await ZipcodeLookupService.lookup(code);
       if (info.city == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text('❌ Invalid USA zipcode: $code'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
       final cityDisplay = (info.city != null && info.state != null)
           ? '${info.city}, ${info.state}'
           : (info.city ?? 'Unknown');
 
-    setState(() {
+      setState(() {
         _selectedZipcodes.add('$code|$cityDisplay');
-      _zipcodeController.clear();
-    });
+        _zipcodeController.clear();
+      });
 
       // Save to local storage
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('user_zipcodes', _selectedZipcodes);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
           content: Text('✓ Added $code - $cityDisplay'),
-        backgroundColor: Colors.green,
-      ),
-    );
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1230,7 +1244,6 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
     );
   }
 
-
   Future<void> _completeRegistration() async {
     // Validate passwords
     if (_passwordController.text.isEmpty ||
@@ -1305,11 +1318,12 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
         agencyName: _agencyNameController.text,
         phone: _phoneController.text,
         additionalData: {
-        'business_name': _agencyNameController.text,
-        'contact_name': _contactNameController.text,
-        'zipcodes': plainZipcodes,
-        'industry': 'Healthcare',
-        if (_selectedPlanId != null) 'plan_id': _selectedPlanId,
+          'business_name': _agencyNameController.text,
+          'contact_name': _contactNameController.text,
+          'zipcodes': plainZipcodes,
+          'industry':
+              _selectedIndustry ?? 'Healthcare', // User-selected industry
+          if (_selectedPlanId != null) 'plan_id': _selectedPlanId,
           if (savedPaymentMethodId != null && savedPaymentMethodId.isNotEmpty)
             'payment_method_id': savedPaymentMethodId,
         },
@@ -1319,107 +1333,107 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
       print('✅ Account created successfully: $responseData');
 
       // ✅ SAVE REGISTRATION DATA TO LOCAL STORAGE
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('is_logged_in', true);
-        await prefs.setString('user_name', _contactNameController.text);
-        await prefs.setString('user_email', _emailController.text);
-        await prefs.setString('user_phone', _phoneController.text);
-        await prefs.setString('agency_name', _agencyNameController.text);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('user_name', _contactNameController.text);
+      await prefs.setString('user_email', _emailController.text);
+      await prefs.setString('user_phone', _phoneController.text);
+      await prefs.setString('agency_name', _agencyNameController.text);
 
-        // ✅ SAVE JWT TOKEN FROM BACKEND RESPONSE (CRITICAL!)
-        if (responseData['token'] != null) {
-          final token = responseData['token'].toString();
-          await prefs.setString('jwt_token', token);
-          // Also save to secure storage via ApiClient
-          await ApiClient.saveToken(token);
-          print('✅ JWT token saved for API authentication');
-        }
+      // ✅ SAVE JWT TOKEN FROM BACKEND RESPONSE (CRITICAL!)
+      if (responseData['token'] != null) {
+        final token = responseData['token'].toString();
+        await prefs.setString('jwt_token', token);
+        // Also save to secure storage via ApiClient
+        await ApiClient.saveToken(token);
+        print('✅ JWT token saved for API authentication');
+      }
 
-        // ✅ SAVE AGENCY ID FROM BACKEND RESPONSE
-        if (responseData['agency_id'] != null) {
-          await prefs.setString('agency_id', responseData['agency_id']);
-          print('✅ Agency ID saved: ${responseData['agency_id']}');
-        }
+      // ✅ SAVE AGENCY ID FROM BACKEND RESPONSE
+      if (responseData['agency_id'] != null) {
+        await prefs.setString('agency_id', responseData['agency_id']);
+        print('✅ Agency ID saved: ${responseData['agency_id']}');
+      }
 
-        // Build zipcode list with city names in "zipcode|city" format (already stored)
-        final zipcodesList = List<String>.from(_selectedZipcodes);
-        await prefs.setStringList('user_zipcodes', zipcodesList);
-        await prefs.setString('subscription_plan', _selectedPlan);
-        if (_selectedPlanId != null) {
-          await prefs.setString('subscription_plan_id', _selectedPlanId!);
-        }
+      // Build zipcode list with city names in "zipcode|city" format (already stored)
+      final zipcodesList = List<String>.from(_selectedZipcodes);
+      await prefs.setStringList('user_zipcodes', zipcodesList);
+      await prefs.setString('subscription_plan', _selectedPlan);
+      if (_selectedPlanId != null) {
+        await prefs.setString('subscription_plan_id', _selectedPlanId!);
+      }
 
-        // Save monthly price from selected plan
-        final selectedPlanData = _availablePlans.firstWhere(
-          (p) => (p['id'] ?? '') == _selectedPlanId,
-          orElse: () => {},
-        );
-        final monthlyPriceRaw = selectedPlanData['price_per_unit'] ??
-            selectedPlanData['pricePerUnit'] ??
-            selectedPlanData['base_price'] ??
-            selectedPlanData['basePrice'] ??
-            0.0;
-        final monthlyPrice = (monthlyPriceRaw is num)
-            ? monthlyPriceRaw.toDouble()
-            : (double.tryParse(monthlyPriceRaw.toString()) ?? 0.0);
-        await prefs.setDouble('monthly_price', monthlyPrice.toDouble());
+      // Save monthly price from selected plan
+      final selectedPlanData = _availablePlans.firstWhere(
+        (p) => (p['id'] ?? '') == _selectedPlanId,
+        orElse: () => {},
+      );
+      final monthlyPriceRaw = selectedPlanData['price_per_unit'] ??
+          selectedPlanData['pricePerUnit'] ??
+          selectedPlanData['base_price'] ??
+          selectedPlanData['basePrice'] ??
+          0.0;
+      final monthlyPrice = (monthlyPriceRaw is num)
+          ? monthlyPriceRaw.toDouble()
+          : (double.tryParse(monthlyPriceRaw.toString()) ?? 0.0);
+      await prefs.setDouble('monthly_price', monthlyPrice.toDouble());
 
-        await prefs.setString(
-            'registration_date', DateTime.now().toIso8601String());
-        await prefs.setString('payment_status', 'active');
-        await prefs.setString('payment_method', 'card');
+      await prefs.setString(
+          'registration_date', DateTime.now().toIso8601String());
+      await prefs.setString('payment_status', 'active');
+      await prefs.setString('payment_method', 'card');
 
-        setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '🎉 Welcome ${_contactNameController.text}! Account created successfully!'),
+          backgroundColor: const Color(0xFF00888C),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Show verification notification after successful registration and subscription
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                '🎉 Welcome ${_contactNameController.text}! Account created successfully!'),
-            backgroundColor: const Color(0xFF00888C),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-
-        // Show verification notification after successful registration and subscription
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.verified_user, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Verify the agency/company to get leads',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            content: const Row(
+              children: [
+                Icon(Icons.verified_user, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Verify the agency/company to get leads',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Verify',
+              textColor: Colors.white,
+              onPressed: () {
+                // Navigate to settings document verification
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DocumentVerificationPage(
+                      agencyId: responseData['agency_id']?.toString() ?? '',
                     ),
                   ),
-                ],
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 5),
-              action: SnackBarAction(
-                label: 'Verify',
-                textColor: Colors.white,
-                onPressed: () {
-                  // Navigate to settings document verification
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DocumentVerificationPage(
-                        agencyId: responseData['agency_id']?.toString() ?? '',
-                      ),
-                    ),
-                  );
-                },
-              ),
+                );
+              },
             ),
-          );
-        }
+          ),
+        );
+      }
 
-        // Navigate directly to home - document verification is available in settings
-        _navigateToHome(context);
+      // Navigate directly to home - document verification is available in settings
+      _navigateToHome(context);
     } catch (e) {
       setState(() => _isLoading = false);
       print('❌ Registration error: $e');
@@ -1428,48 +1442,63 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
       // Extract user-friendly error message with detailed logging
       String errorMessage = 'Registration failed';
       bool isBackendUnavailable = false;
-      
+
       print('🔍 Full error details:');
       print('   Error: $e');
       print('   Error type: ${e.runtimeType}');
       print('   Error string: ${e.toString()}');
-      
+
       if (e.toString().contains('No backend server available') ||
           e.toString().contains('No response from server') ||
           e.toString().contains('Backend server is not running')) {
-        errorMessage = 'Backend server is not running. Please start the backend server.';
+        errorMessage =
+            'Backend server is not running. Please start the backend server.';
         isBackendUnavailable = true;
-      } else if (e.toString().contains('timeout') || e.toString().contains('Timeout')) {
-        errorMessage = 'Connection timeout. Please check your internet connection and ensure the backend server is running.';
+      } else if (e.toString().contains('timeout') ||
+          e.toString().contains('Timeout')) {
+        errorMessage =
+            'Connection timeout. Please check your internet connection and ensure the backend server is running.';
         isBackendUnavailable = true;
       } else if (e.toString().contains('Exception:')) {
         // Extract the actual error message after "Exception: "
         final exceptionIndex = e.toString().indexOf('Exception: ');
         if (exceptionIndex != -1) {
-          errorMessage = e.toString().substring(exceptionIndex + 'Exception: '.length);
+          errorMessage =
+              e.toString().substring(exceptionIndex + 'Exception: '.length);
         } else {
           errorMessage = e.toString();
         }
-      } else if (e.toString().contains('email') || e.toString().contains('Email')) {
-        if (e.toString().toLowerCase().contains('already exists') || 
+      } else if (e.toString().contains('email') ||
+          e.toString().contains('Email')) {
+        if (e.toString().toLowerCase().contains('already exists') ||
             e.toString().toLowerCase().contains('duplicate')) {
-          errorMessage = 'Email already exists. Please use a different email address.';
+          errorMessage =
+              'Email already exists. Please use a different email address.';
         } else {
-          errorMessage = 'Invalid email format. Please enter a valid email address.';
+          errorMessage =
+              'Invalid email format. Please enter a valid email address.';
         }
-      } else if (e.toString().contains('password') || e.toString().contains('Password')) {
-        errorMessage = 'Password does not meet requirements. Please check password rules.';
-      } else if (e.toString().contains('400') || e.toString().contains('Bad Request')) {
-        errorMessage = 'Invalid registration data. Please check all fields and try again.';
-      } else if (e.toString().contains('409') || e.toString().contains('Conflict')) {
+      } else if (e.toString().contains('password') ||
+          e.toString().contains('Password')) {
+        errorMessage =
+            'Password does not meet requirements. Please check password rules.';
+      } else if (e.toString().contains('400') ||
+          e.toString().contains('Bad Request')) {
+        errorMessage =
+            'Invalid registration data. Please check all fields and try again.';
+      } else if (e.toString().contains('409') ||
+          e.toString().contains('Conflict')) {
         errorMessage = 'Account already exists. Please try logging in instead.';
-      } else if (e.toString().contains('500') || e.toString().contains('Internal Server Error')) {
-        errorMessage = 'Server error. Please try again later or contact support.';
+      } else if (e.toString().contains('500') ||
+          e.toString().contains('Internal Server Error')) {
+        errorMessage =
+            'Server error. Please try again later or contact support.';
       } else {
         // Use the error message as-is, but clean it up
         errorMessage = e.toString().replaceAll('Exception: ', '').trim();
         if (errorMessage.isEmpty) {
-          errorMessage = 'Registration failed. Please check your connection and try again.';
+          errorMessage =
+              'Registration failed. Please check your connection and try again.';
         }
       }
 
@@ -1526,7 +1555,7 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
   /// ✅ Simulate registration in test mode (when backend unavailable)
   Future<void> _simulateRegistrationInTestMode() async {
     print('🧪 Simulating registration in test mode...');
-    
+
     try {
       // Enable test mode
       final prefs = await SharedPreferences.getInstance();
@@ -1541,10 +1570,11 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
       await prefs.setString('user_email', _emailController.text);
       await prefs.setString('user_phone', _phoneController.text);
       await prefs.setString('agency_name', _agencyNameController.text);
-      
+
       // Generate mock token and agency ID
       final mockToken = 'test_token_${DateTime.now().millisecondsSinceEpoch}';
-      final mockAgencyId = 'agency_test_${DateTime.now().millisecondsSinceEpoch}';
+      final mockAgencyId =
+          'agency_test_${DateTime.now().millisecondsSinceEpoch}';
       await prefs.setString('jwt_token', mockToken);
       // Also save to secure storage via ApiClient
       await ApiClient.saveToken(mockToken);
@@ -1574,7 +1604,8 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
           : (double.tryParse(monthlyPriceRaw.toString()) ?? 0.0);
       await prefs.setDouble('monthly_price', monthlyPrice.toDouble());
 
-      await prefs.setString('registration_date', DateTime.now().toIso8601String());
+      await prefs.setString(
+          'registration_date', DateTime.now().toIso8601String());
       await prefs.setString('payment_status', 'active');
       await prefs.setString('payment_method', 'card');
 
@@ -1816,6 +1847,53 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          const Text('Industry', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _selectedIndustry,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFFF5F7FA),
+              hintText: 'Select your industry',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    const BorderSide(color: Color(0xFF00888C), width: 2),
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: 'Home Health and Hospice',
+                child: Text('Home Health and Hospice'),
+              ),
+              DropdownMenuItem(
+                value: 'Insurance',
+                child: Text('Insurance'),
+              ),
+              DropdownMenuItem(
+                value: 'Finance',
+                child: Text('Finance'),
+              ),
+              DropdownMenuItem(
+                value: 'Handyman Services',
+                child: Text('Handyman Services'),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _selectedIndustry = value;
+              });
+            },
+          ),
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
@@ -1943,23 +2021,23 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                         children: [
                           Expanded(
                             child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                planName,
-                                style: TextStyle(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  planName,
+                                  style: TextStyle(
                                     fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected
-                                      ? const Color(0xFF00888C)
-                                      : const Color(0xFF1A202C),
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? const Color(0xFF00888C)
+                                        : const Color(0xFF1A202C),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
+                                const SizedBox(height: 4),
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                              Text(
+                                    Text(
                                       '\$',
                                       style: TextStyle(
                                         fontSize: 16,
@@ -1971,14 +2049,14 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                                     ),
                                     Text(
                                       price.toStringAsFixed(0),
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected
-                                      ? const Color(0xFF00888C)
-                                      : const Color(0xFF1A202C),
-                                ),
-                              ),
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected
+                                            ? const Color(0xFF00888C)
+                                            : const Color(0xFF1A202C),
+                                      ),
+                                    ),
                                     const Text(
                                       '/mo',
                                       style: TextStyle(
@@ -2018,7 +2096,7 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                        '$displayUnits zipcodes included',
+                          '$displayUnits zipcodes included',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -2222,10 +2300,10 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                  onPressed: _addZipcode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00888C),
-                    foregroundColor: Colors.white,
+                onPressed: _addZipcode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00888C),
+                  foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 ),
@@ -2280,7 +2358,7 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
               }).toList(),
             ),
             const SizedBox(height: 8),
-          Text(
+            Text(
               '${_selectedZipcodes.length} of $_maxZipcodes zipcodes selected',
               style: TextStyle(
                 fontSize: 12,
@@ -2306,7 +2384,7 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                     child: Text(
                       'No zipcodes selected yet. Add zipcodes above to define your service areas.',
                       style: TextStyle(
-              fontSize: 14,
+                        fontSize: 14,
                         color: Color(0xFF64748B),
                       ),
                     ),
@@ -3493,7 +3571,9 @@ class _PaymentGatewayDialogState extends State<PaymentGatewayDialog> {
     try {
       if (_selectedPaymentMethod == 'card') {
         // ✅ Platform check: Only use Stripe on supported platforms
-        if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android)) {
+        if (!kIsWeb &&
+            (defaultTargetPlatform == TargetPlatform.iOS ||
+                defaultTargetPlatform == TargetPlatform.android)) {
           try {
             // Create a PaymentMethod with Stripe (test mode)
             final pm = await stripe.Stripe.instance.createPaymentMethod(
@@ -3512,39 +3592,42 @@ class _PaymentGatewayDialogState extends State<PaymentGatewayDialog> {
           } catch (stripeError) {
             print('⚠️ Stripe payment method creation failed: $stripeError');
             // For development: Generate a mock payment method ID
-            _paymentMethodId = 'pm_test_${DateTime.now().millisecondsSinceEpoch}';
+            _paymentMethodId =
+                'pm_test_${DateTime.now().millisecondsSinceEpoch}';
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('payment_method_id', _paymentMethodId!);
-            print('🧪 Using mock payment method ID for development: $_paymentMethodId');
+            print(
+                '🧪 Using mock payment method ID for development: $_paymentMethodId');
           }
         } else {
           // ✅ Fallback for web/unsupported platforms: Generate mock payment method ID
           _paymentMethodId = 'pm_test_${DateTime.now().millisecondsSinceEpoch}';
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('payment_method_id', _paymentMethodId!);
-          print('🧪 Web/Unsupported platform: Using mock payment method ID: $_paymentMethodId');
+          print(
+              '🧪 Web/Unsupported platform: Using mock payment method ID: $_paymentMethodId');
         }
       }
 
-    setState(() => _isProcessing = false);
+      setState(() => _isProcessing = false);
 
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
               Text('✅ Payment method saved!'),
-          ],
+            ],
+          ),
+          backgroundColor: Color(0xFF10B981),
+          duration: Duration(seconds: 2),
         ),
-        backgroundColor: Color(0xFF10B981),
-        duration: Duration(seconds: 2),
-      ),
-    );
+      );
 
       await Future.delayed(const Duration(milliseconds: 400));
-    widget.onPaymentSuccess();
+      widget.onPaymentSuccess();
     } catch (e) {
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3727,95 +3810,99 @@ class _PaymentGatewayDialogState extends State<PaymentGatewayDialog> {
                 // Payment Form
                 if (_selectedPaymentMethod == 'card') ...[
                   Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
                         'Card Details',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0F172A),
-                          ),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
                         ),
-                        const SizedBox(height: 8),
-                        // ✅ Platform check: Only use Stripe CardField on supported platforms
-                        if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android))
-                          stripe.CardField(
-                            onCardChanged: (details) {
-                              setState(() {
-                                _isCardComplete = details?.complete ?? false;
-                              });
-                            },
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              hintText: '1234 1234 1234 1234',
+                      ),
+                      const SizedBox(height: 8),
+                      // ✅ Platform check: Only use Stripe CardField on supported platforms
+                      if (!kIsWeb &&
+                          (defaultTargetPlatform == TargetPlatform.iOS ||
+                              defaultTargetPlatform == TargetPlatform.android))
+                        stripe.CardField(
+                          onCardChanged: (details) {
+                            setState(() {
+                              _isCardComplete = details?.complete ?? false;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: '1234 1234 1234 1234',
+                          ),
+                        )
+                      else
+                        // ✅ Fallback: Manual card input for web/unsupported platforms
+                        Column(
+                          children: [
+                            TextField(
+                              decoration: const InputDecoration(
+                                labelText: 'Card Number',
+                                hintText: '1234 1234 1234 1234',
+                                prefixIcon: Icon(Icons.credit_card),
+                                border: OutlineInputBorder(),
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (value) {
+                                // Simple validation: card number should be 13-19 digits
+                                final digitsOnly =
+                                    value.replaceAll(RegExp(r'\D'), '');
+                                setState(() {
+                                  _isCardComplete = digitsOnly.length >= 13 &&
+                                      digitsOnly.length <= 19;
+                                });
+                              },
                             ),
-                          )
-                        else
-                          // ✅ Fallback: Manual card input for web/unsupported platforms
-                          Column(
-                            children: [
-                              TextField(
-                                decoration: const InputDecoration(
-                                  labelText: 'Card Number',
-                                  hintText: '1234 1234 1234 1234',
-                                  prefixIcon: Icon(Icons.credit_card),
-                                  border: OutlineInputBorder(),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    decoration: const InputDecoration(
+                                      labelText: 'Expiry (MM/YY)',
+                                      hintText: '12/25',
+                                      prefixIcon: Icon(Icons.calendar_today),
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                  ),
                                 ),
-                                keyboardType: TextInputType.number,
-                                onChanged: (value) {
-                                  // Simple validation: card number should be 13-19 digits
-                                  final digitsOnly = value.replaceAll(RegExp(r'\D'), '');
-                                  setState(() {
-                                    _isCardComplete = digitsOnly.length >= 13 && digitsOnly.length <= 19;
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      decoration: const InputDecoration(
-                                        labelText: 'Expiry (MM/YY)',
-                                        hintText: '12/25',
-                                        prefixIcon: Icon(Icons.calendar_today),
-                                        border: OutlineInputBorder(),
-                                      ),
-                                      keyboardType: TextInputType.number,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    decoration: const InputDecoration(
+                                      labelText: 'CVV',
+                                      hintText: '123',
+                                      prefixIcon: Icon(Icons.lock),
+                                      border: OutlineInputBorder(),
                                     ),
+                                    keyboardType: TextInputType.number,
+                                    obscureText: true,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      decoration: const InputDecoration(
-                                        labelText: 'CVV',
-                                        hintText: '123',
-                                        prefixIcon: Icon(Icons.lock),
-                                        border: OutlineInputBorder(),
-                                      ),
-                                      keyboardType: TextInputType.number,
-                                      obscureText: true,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        const SizedBox(height: 16),
-                        const Text(
-                        'Cardholder Name (optional)',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0F172A),
-                          ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Cardholder Name (optional)',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       TextField(
-                          controller: _cardHolderController,
+                        controller: _cardHolderController,
                         decoration: const InputDecoration(
-                            hintText: 'John Doe',
+                          hintText: 'John Doe',
                           prefixIcon: Icon(Icons.person),
                           border: OutlineInputBorder(),
                         ),
@@ -6913,12 +7000,12 @@ class _LeadsPageState extends State<LeadsPage> {
                             children: [
                               Flexible(
                                 child: Text(
-                            name,
-                            style: const TextStyle(
+                                  name,
+                                  style: const TextStyle(
                                     fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
-                            ),
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0F172A),
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -6955,13 +7042,13 @@ class _LeadsPageState extends State<LeadsPage> {
                                 const SizedBox(width: 6),
                                 Text(
                                   '• $serviceType',
-                                style: const TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 11,
-                                  color: Color(0xFF64748B),
-                                ),
+                                    color: Color(0xFF64748B),
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                              ),
+                                ),
                               ],
                             ],
                           ),
@@ -7084,63 +7171,63 @@ class _LeadsPageState extends State<LeadsPage> {
                 Row(
                   children: [
                     Expanded(
-                        child: InkWell(
+                      child: InkWell(
                         onTap: () => _makePhoneCall(phone, leadId: lead['id']),
                         borderRadius: BorderRadius.circular(8),
-                          child: Container(
+                        child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
+                          decoration: BoxDecoration(
                             color: const Color(0xFF10B981).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.phone,
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.phone,
                                   size: 16, color: Color(0xFF10B981)),
                               SizedBox(width: 4),
-                                Text(
-                                  'Call',
-                                  style: TextStyle(
+                              Text(
+                                'Call',
+                                style: TextStyle(
                                   fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w600,
                                   color: Color(0xFF10B981),
-                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
-                        child: InkWell(
-                          onTap: () => _sendEmail(email),
+                      child: InkWell(
+                        onTap: () => _sendEmail(email),
                         borderRadius: BorderRadius.circular(8),
-                          child: Container(
+                        child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
+                          decoration: BoxDecoration(
                             color: const Color(0xFF3B82F6).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.email,
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.email,
                                   size: 16, color: Color(0xFF3B82F6)),
                               SizedBox(width: 4),
-                                Text(
-                                  'Email',
-                                  style: TextStyle(
+                              Text(
+                                'Email',
+                                style: TextStyle(
                                   fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w600,
                                   color: Color(0xFF3B82F6),
-                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -7165,9 +7252,9 @@ class _LeadsPageState extends State<LeadsPage> {
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   color: Color(0xFF00888C),
-                      ),
-                    ),
-                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -8373,16 +8460,16 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     try {
       final plans = await SubscriptionService.getPlans(activeOnly: true);
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Track price with local variable
       double newPrice = _monthlyPrice; // Start with current price
       String newPlan = _currentPlan;
-      
+
       setState(() {
         _availablePlans = plans;
         _loadingPlans = false;
       });
-      
+
       // ✅ FIRST: Try to fetch actual subscription from backend API
       try {
         final subscriptionStatus = await SubscriptionService.getSubscription();
@@ -8391,13 +8478,13 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
           final subscription = subscriptionStatus['subscription'];
           final planNameFromBackend = subscription['planName'];
           final monthlyPriceFromBackend = subscription['monthlyPrice'];
-          
+
           if (planNameFromBackend != null &&
               planNameFromBackend.toString().isNotEmpty) {
             newPlan = planNameFromBackend.toString();
             print('✅ Loaded plan from backend API: $newPlan');
           }
-          
+
           if (monthlyPriceFromBackend != null) {
             final price = (monthlyPriceFromBackend is num)
                 ? monthlyPriceFromBackend.toDouble()
@@ -8412,7 +8499,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
       } catch (e) {
         print('⚠️ Could not fetch subscription from backend: $e');
       }
-      
+
       // ✅ SECOND: If backend didn't provide data, try saved plan ID
       if ((newPrice == 0.0 || newPlan.isEmpty) && plans.isNotEmpty) {
         final savedPlanId = prefs.getString('subscription_plan_id');
@@ -8440,7 +8527,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
           }
         }
       }
-      
+
       // ✅ THIRD: If still no data, try to match by saved plan name
       if ((newPrice == 0.0 || newPlan.isEmpty) && plans.isNotEmpty) {
         final savedPlanName = prefs.getString('subscription_plan');
@@ -8475,7 +8562,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
           }
         }
       }
-      
+
       // ✅ FOURTH: Only if we still have nothing, use Basic as absolute last resort
       // (This should rarely happen - only if user has no subscription at all)
       if (newPrice == 0.0 || newPlan.isEmpty) {
@@ -8484,13 +8571,13 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         newPlan = 'Basic';
         await prefs.setDouble('monthly_price', 99.0);
       }
-      
+
       // Update state with final values
       setState(() {
         _monthlyPrice = newPrice;
         _currentPlan = newPlan;
       });
-      
+
       print('✅ Final loaded plan: $_currentPlan, price: \$$_monthlyPrice');
     } catch (e) {
       print('Error loading plans: $e');
@@ -8677,29 +8764,29 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isCurrent)
-              Container(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isCurrent)
+                        Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                    color: accentColor,
+                          decoration: BoxDecoration(
+                            color: accentColor,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text('ACTIVE',
-                    style: TextStyle(
-                        color: Colors.white,
+                              style: TextStyle(
+                                  color: Colors.white,
                                   fontSize: 10,
-                        fontWeight: FontWeight.bold)),
-              ),
+                                  fontWeight: FontWeight.bold)),
+                        ),
                       if (isCurrent) const SizedBox(height: 6),
-            Text(plan,
-                style: TextStyle(
+                      Text(plan,
+                          style: TextStyle(
                               fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: accentColor)),
+                              fontWeight: FontWeight.bold,
+                              color: accentColor)),
                     ],
                   ),
                 ),
@@ -8707,25 +8794,25 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('\$',
-                    style: TextStyle(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('\$',
+                            style: TextStyle(
                                 fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: accentColor)),
-                Text(price.toStringAsFixed(0),
-                    style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: accentColor)),
+                        Text(price.toStringAsFixed(0),
+                            style: TextStyle(
                                 fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: accentColor)),
+                                fontWeight: FontWeight.bold,
+                                color: accentColor)),
                       ],
                     ),
-                const Text('/mo',
+                    const Text('/mo',
                         style: TextStyle(fontSize: 12, color: Colors.grey)),
-              ],
-            ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -9054,10 +9141,10 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                                             ),
                                           );
                                         }).toList(),
-                              ),
-                            ],
-                          ),
-                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ],
                           ),
@@ -9113,12 +9200,12 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                               final baseZipcodes =
                                   ((p['base_zipcodes_included'] ??
                                           p['base_cities_included'] ??
-                                      p['baseUnits'] ??
-                                      p['base_units'] ??
-                                      p['minUnits'] ??
-                                      p['min_units'] ??
-                                      3) as num)
-                                  .toInt();
+                                          p['baseUnits'] ??
+                                          p['base_units'] ??
+                                          p['minUnits'] ??
+                                          p['min_units'] ??
+                                          3) as num)
+                                      .toInt();
                               final maxAreas =
                                   baseZipcodes; // Simple model: max = base
                               final features = (p['features'] is List)
@@ -9214,7 +9301,7 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
   final TextEditingController _manualZipcodeController =
       TextEditingController();
   String? _detectedCity;
-  
+
   // ✅ Subscription plans from admin portal
   List<Map<String, dynamic>> _availablePlans = [];
   bool _loadingPlans = false;
@@ -12120,18 +12207,25 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
               final plan = entry.value;
               // ignore: unused_local_variable
               final planId = plan['id'] ?? '';
-              final planName = (plan['name'] ?? plan['plan_name'] ?? 'Unknown Plan').toString();
+              final planName =
+                  (plan['name'] ?? plan['plan_name'] ?? 'Unknown Plan')
+                      .toString();
               final price = _getPlanPrice(plan);
               final baseUnits = _getPlanBaseUnits(plan);
               final displayUnits = baseUnits > 0 ? baseUnits : 1;
-              final isCurrentPlan = _currentPlan.toLowerCase() == planName.toLowerCase();
-              
+              final isCurrentPlan =
+                  _currentPlan.toLowerCase() == planName.toLowerCase();
+
               // Get features from plan data
               List<String> features = [];
               if (plan['features'] is List) {
-                features = List<String>.from(plan['features'].map((e) => e.toString()));
-              } else if (plan['featuresText'] != null && plan['featuresText'].toString().isNotEmpty) {
-                features = plan['featuresText'].toString().split('\n')
+                features = List<String>.from(
+                    plan['features'].map((e) => e.toString()));
+              } else if (plan['featuresText'] != null &&
+                  plan['featuresText'].toString().isNotEmpty) {
+                features = plan['featuresText']
+                    .toString()
+                    .split('\n')
                     .map((s) => s.trim())
                     .where((s) => s.isNotEmpty)
                     .toList();
@@ -12143,14 +12237,15 @@ class _ManageSubscriptionModalState extends State<ManageSubscriptionModal> {
                   'Mobile app access',
                 ];
               }
-              
+
               // Mark as recommended if it's the middle plan (or second plan if 2 plans)
-              final isRecommended = _availablePlans.length >= 3 
+              final isRecommended = _availablePlans.length >= 3
                   ? index == (_availablePlans.length / 2).floor()
                   : index == 1 && _availablePlans.length >= 2;
-              
+
               return Padding(
-                padding: EdgeInsets.only(bottom: index < _availablePlans.length - 1 ? 16 : 0),
+                padding: EdgeInsets.only(
+                    bottom: index < _availablePlans.length - 1 ? 16 : 0),
                 child: _buildPlanOption(
                   name: planName,
                   price: price.toInt(),
@@ -13156,21 +13251,21 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-            backgroundColor: Colors.white,
-            title: const Row(
-              children: [
+        backgroundColor: Colors.white,
+        title: const Row(
+          children: [
             Icon(Icons.location_on, color: Color(0xFF00888C)),
-                SizedBox(width: 8),
-                Expanded(
+            SizedBox(width: 8),
+            Expanded(
                 child: Text('View Service Areas',
-                        style: TextStyle(color: Colors.black87))),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+                    style: TextStyle(color: Colors.black87))),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               // Info message that admin manages zipcodes
               Container(
                 padding: const EdgeInsets.all(12),
@@ -13197,7 +13292,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
-                    const SizedBox(height: 16),
+              const SizedBox(height: 16),
               // Display current zipcodes from backend
               FutureBuilder<List<String>>(
                 future: TerritoryService.getZipcodes(),
@@ -13229,8 +13324,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       const Text(
                         'Your Assigned Zipcodes',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                           color: Colors.black87,
                         ),
                       ),
@@ -13249,7 +13344,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           );
                         }).toList(),
                       ),
-                  const SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Text(
                         '${zipcodes.length} zipcode(s) assigned',
                         style: const TextStyle(
@@ -13267,12 +13362,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       fontSize: 12,
                       fontStyle: FontStyle.italic,
                       color: Colors.grey)),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
             child: const Text('Close', style: TextStyle(color: Colors.black87)),
           ),
         ],
@@ -13687,7 +13782,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void _showDocumentVerification() async {
     final prefs = await SharedPreferences.getInstance();
     final agencyId = prefs.getString('agency_id') ?? '';
-    
+
     if (agencyId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
