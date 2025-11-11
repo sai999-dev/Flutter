@@ -14,6 +14,7 @@ class AuthService {
     String? phone,
     Map<String, dynamic>? additionalData,
   }) async {
+    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedPassword = password.trim();
     
