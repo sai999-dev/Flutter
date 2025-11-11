@@ -122,19 +122,81 @@ class DocumentVerificationService {
   /// Returns file path if selected, null if cancelled
   static Future<String?> pickDocument() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.single.path != null) {
-        return result.files.single.path;
+      print('📂 Opening file picker dialog...');
+      
+      FilePickerResult? result;
+      
+      // Try with custom file types first (more restrictive)
+      try {
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+          allowMultiple: false,
+          withData: false,
+          withReadStream: false,
+          dialogTitle: 'Select a document (PDF, PNG, JPG, JPEG)',
+        );
+      } catch (e) {
+        print('⚠️ Custom file type picker failed, trying any file type: $e');
+        // Fallback to any file type if custom fails
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.any,
+          allowMultiple: false,
+          withData: false,
+          withReadStream: false,
+          dialogTitle: 'Select a document file',
+        );
       }
+
+      print('📂 File picker returned: ${result != null ? "result received" : "null"}');
+      
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.single;
+        print('📄 File info - Name: ${file.name}, Path: ${file.path}, Size: ${file.size}');
+        
+        // Validate file extension
+        final extension = path.extension(file.name).toLowerCase();
+        final allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg'];
+        if (!allowedExtensions.contains(extension)) {
+          throw Exception('Invalid file type. Please select a PDF, PNG, JPG, or JPEG file.');
+        }
+        
+        // Handle both path and bytes (for web/platform differences)
+        if (file.path != null && file.path!.isNotEmpty) {
+          // Verify file exists
+          final fileExists = await File(file.path!).exists();
+          if (fileExists) {
+            print('✅ File selected and verified: ${file.path}');
+            return file.path;
+          } else {
+            print('⚠️ File path exists but file not found: ${file.path}');
+            throw Exception('Selected file not found. Please try selecting the file again.');
+          }
+        } else if (file.name.isNotEmpty) {
+          // On some platforms (like web), path might be null but we have bytes
+          // For now, we'll throw an error to guide the user
+          print('⚠️ File selected but path is null. File name: ${file.name}');
+          throw Exception('File path not available. Please try selecting the file again or use camera option.');
+        } else {
+          print('⚠️ File selected but no name or path available');
+          throw Exception('Invalid file selection. Please try again.');
+        }
+      }
+      
+      print('ℹ️ File picker cancelled or no file selected');
       return null;
     } catch (e) {
       print('❌ File picker error: $e');
-      return null;
+      // Re-throw to show error in UI, but wrap in a user-friendly message
+      if (e.toString().contains('permission') || e.toString().contains('Permission')) {
+        throw Exception('File access permission denied. Please grant file access permissions and try again.');
+      } else if (e.toString().contains('Invalid file type')) {
+        rethrow; // Already has a good message
+      } else if (e.toString().contains('path') || e.toString().contains('Path')) {
+        rethrow; // Already has a good message
+      } else {
+        throw Exception('Failed to select file: ${e.toString()}. Please try again or use the camera option.');
+      }
     }
   }
 

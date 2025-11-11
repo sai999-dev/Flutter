@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart'
@@ -433,15 +434,22 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
+      // ✅ TRIM EMAIL AND PASSWORD to avoid whitespace issues
+      final email = _emailController.text.trim().toLowerCase();
+      final password = _passwordController.text.trim();
+      
+      print('🔐 Login attempt - Email: $email');
+      
       // ✅ TRY REAL API LOGIN using AuthService
       Map<String, dynamic> response;
       try {
         response = await AuthService.login(
-          _emailController.text,
-          _passwordController.text,
+          email,
+          password,
         );
       } catch (e) {
         // ✅ LIVE MODE: Show error - no test mode fallback
+        print('❌ Login error details: $e');
         rethrow;
       }
 
@@ -569,152 +577,13 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _showForgotPassword() {
-    final emailController = TextEditingController();
-    bool isLoading = false;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (dialogContext, setState) {
-            return AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.lock_reset, color: Color(0xFF00888C)),
-                  SizedBox(width: 8),
-                  Text('Reset Password'),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Enter your email to receive reset instructions'),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    enabled: !isLoading,
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isLoading
-                      ? null
-                      : () {
-                          emailController.dispose();
-                          Navigator.pop(dialogContext);
-                        },
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isLoading
-                      ? null
-                      : () async {
-                          final email = emailController.text.trim();
-
-                          if (email.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please enter your email'),
-                                backgroundColor: Colors.orange,
-                              ),
-                            );
-                            return;
-                          }
-
-                          // Basic email validation
-                          if (!email.contains('@') || !email.contains('.')) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Please enter a valid email address'),
-                                backgroundColor: Colors.orange,
-                              ),
-                            );
-                            return;
-                          }
-
-                          setState(() => isLoading = true);
-
-                          try {
-                            final result =
-                                await AuthService.forgotPassword(email);
-
-                            // Close dialog before showing success message
-                            emailController.dispose();
-                            Navigator.pop(dialogContext);
-
-                            // Show success message
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(result['message'] ??
-                                      'Password reset instructions have been sent.'),
-                                  backgroundColor: Colors.green,
-                                  duration: const Duration(seconds: 5),
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            setState(() => isLoading = false);
-
-                            String errorMessage =
-                                'Failed to request password reset';
-                            if (e
-                                .toString()
-                                .contains('No backend server available')) {
-                              errorMessage =
-                                  'Cannot connect to server. Please check your connection.';
-                            } else if (e.toString().contains('Exception:')) {
-                              errorMessage =
-                                  e.toString().replaceFirst('Exception: ', '');
-                            }
-
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('❌ $errorMessage'),
-                                  backgroundColor: Colors.red,
-                                  duration: const Duration(seconds: 4),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00888C),
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text('Send'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    ).then((_) {
-      // Ensure controller is disposed when dialog is closed
-      try {
-        emailController.dispose();
-      } catch (e) {
-        // Controller already disposed, ignore
-      }
-    });
+    // Navigate to ForgotPasswordPage instead of showing dialog
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ForgotPasswordPage(),
+      ),
+    );
   }
 
   /// 🔵 Google Sign-In (for future implementation)
@@ -767,7 +636,7 @@ class _LoginPageState extends State<LoginPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Signed in as \\${googleUser.displayName ?? 'User'}'),
+          content: Text('Signed in as ${googleUser.displayName ?? 'User'}'),
           backgroundColor: const Color(0xFF10B981),
           duration: const Duration(seconds: 2),
         ),
@@ -785,6 +654,676 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+// ==================== FORGOT PASSWORD PAGE ====================
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
+
+  @override
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+}
+
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  int _currentStep = 0; // 0: Email, 1: Code, 2: New Password
+  final PageController _pageController = PageController();
+  
+  // Step 1: Email
+  final _emailController = TextEditingController();
+  final _emailFormKey = GlobalKey<FormState>();
+  bool _isLoadingEmail = false;
+  
+  // Step 2: Verification Code
+  final List<TextEditingController> _codeControllers = List.generate(
+    6,
+    (index) => TextEditingController(),
+  );
+  final List<FocusNode> _codeFocusNodes = List.generate(
+    6,
+    (index) => FocusNode(),
+  );
+  bool _isLoadingCode = false;
+  String? _userEmail; // Store email for subsequent steps
+  
+  // Step 3: New Password
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _passwordFormKey = GlobalKey<FormState>();
+  bool _obscureNewPassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _isLoadingPassword = false;
+  String? _verifiedCode; // Store verified code
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    for (var controller in _codeControllers) {
+      controller.dispose();
+    }
+    for (var node in _codeFocusNodes) {
+      node.dispose();
+    }
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // Validation methods
+  String? _validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email is required';
+    }
+    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Please enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Password is required';
+    }
+    if (value.trim().length < 6) {
+      return 'Password must be at least 6 characters';
+    }
+    return null;
+  }
+
+  String? _validateConfirmPassword(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Please confirm your password';
+    }
+    if (value.trim() != _newPasswordController.text.trim()) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }
+
+  // Step 1: Request code
+  Future<void> _requestCode() async {
+    if (!_emailFormKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isLoadingEmail = true);
+
+    try {
+      final email = _emailController.text.trim().toLowerCase();
+      final result = await AuthService.forgotPassword(email);
+
+      setState(() {
+        _isLoadingEmail = false;
+        _userEmail = email;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message'] ?? 'Verification code sent to your email',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Move to next step
+        if (_pageController.hasClients) {
+          _pageController.nextPage(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+        setState(() => _currentStep = 1);
+      }
+    } catch (e) {
+      setState(() => _isLoadingEmail = false);
+
+      String errorMessage = 'Failed to send verification code';
+      if (e.toString().contains('Exception:')) {
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      } else if (e.toString().contains('not found') ||
+          e.toString().contains('does not exist')) {
+        errorMessage = 'No account found with this email address';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  // Step 2: Verify code
+  Future<void> _verifyCode() async {
+    final code = _codeControllers.map((c) => c.text).join();
+    
+    if (code.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the complete 6-digit code'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingCode = true);
+
+    try {
+      final result = await AuthService.verifyResetCode(_userEmail!, code);
+
+      setState(() {
+        _isLoadingCode = false;
+        _verifiedCode = code;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message'] ?? 'Code verified successfully',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Move to next step
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() => _currentStep = 2);
+    } catch (e) {
+      setState(() => _isLoadingCode = false);
+
+      String errorMessage = 'Invalid or expired verification code';
+      if (e.toString().contains('Exception:')) {
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+
+      // Clear code fields on error
+      for (var controller in _codeControllers) {
+        controller.clear();
+      }
+      _codeFocusNodes[0].requestFocus();
+    }
+  }
+
+  // Step 3: Reset password
+  Future<void> _resetPassword() async {
+    if (!_passwordFormKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isLoadingPassword = true);
+
+    try {
+      final newPassword = _newPasswordController.text.trim();
+      final result = await AuthService.resetPassword(
+        email: _userEmail!,
+        code: _verifiedCode!,
+        newPassword: newPassword,
+      );
+
+      setState(() => _isLoadingPassword = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message'] ?? 'Password reset successfully',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Navigate back to login page
+      Navigator.pop(context);
+    } catch (e) {
+      setState(() => _isLoadingPassword = false);
+
+      String errorMessage = 'Failed to reset password';
+      if (e.toString().contains('Exception:')) {
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  // Handle code input - auto move to next field
+  void _onCodeChanged(int index, String value) {
+    if (value.length == 1 && index < 5) {
+      _codeFocusNodes[index + 1].requestFocus();
+    } else if (value.isEmpty && index > 0) {
+      _codeFocusNodes[index - 1].requestFocus();
+    }
+    
+    // Auto-submit when all 6 digits are entered
+    if (index == 5 && value.length == 1) {
+      final fullCode = _codeControllers.map((c) => c.text).join();
+      if (fullCode.length == 6) {
+        _verifyCode();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF00888C)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Reset Password',
+          style: TextStyle(
+            color: Color(0xFF00888C),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      body: PageView(
+        controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          // Step 1: Enter Email
+          _buildEmailStep(),
+          // Step 2: Enter Verification Code
+          _buildCodeStep(),
+          // Step 3: Create New Password
+          _buildPasswordStep(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmailStep() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Form(
+        key: _emailFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
+            const Text(
+              'Enter your registered email address',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF4A5568),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Email',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _emailController,
+              validator: _validateEmail,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: InputDecoration(
+                hintText: 'example@email.com',
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+                prefixIcon: const Icon(Icons.email, color: Color(0xFF00888C)),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoadingEmail ? null : _requestCode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00888C),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isLoadingEmail
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Send Verification Code',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCodeStep() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          const Text(
+            'Enter the 6-digit verification code sent to',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color(0xFF4A5568),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _userEmail ?? '',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF00888C),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(6, (index) {
+              return SizedBox(
+                width: 45,
+                height: 60,
+                child: TextField(
+                  controller: _codeControllers[index],
+                  focusNode: _codeFocusNodes[index],
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  maxLength: 1,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  decoration: InputDecoration(
+                    counterText: '',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF00888C), width: 2),
+                    ),
+                  ),
+                  onChanged: (value) => _onCodeChanged(index, value),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _isLoadingCode ? null : _verifyCode,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00888C),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: _isLoadingCode
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Verify Code',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: _isLoadingCode
+                ? null
+                : () async {
+                    // Resend code
+                    await _requestCode();
+                  },
+            child: const Text(
+              'Resend Code',
+              style: TextStyle(
+                color: Color(0xFF00888C),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPasswordStep() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Form(
+        key: _passwordFormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
+            const Text(
+              'Create a new password',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF4A5568),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'New Password',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _newPasswordController,
+              validator: _validatePassword,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              obscureText: _obscureNewPassword,
+              decoration: InputDecoration(
+                hintText: 'Enter new password',
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+                prefixIcon: const Icon(Icons.lock, color: Color(0xFF00888C)),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureNewPassword ? Icons.visibility_off : Icons.visibility,
+                    color: const Color(0xFF718096),
+                  ),
+                  onPressed: () {
+                    setState(() => _obscureNewPassword = !_obscureNewPassword);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Confirm Password',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _confirmPasswordController,
+              validator: _validateConfirmPassword,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              obscureText: _obscureConfirmPassword,
+              decoration: InputDecoration(
+                hintText: 'Confirm new password',
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+                prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF00888C)),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                    color: const Color(0xFF718096),
+                  ),
+                  onPressed: () {
+                    setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _isLoadingPassword ? null : _resetPassword,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00888C),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isLoadingPassword
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Save New Password',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ==================== MULTI-STEP REGISTRATION ====================
 class MultiStepRegisterPage extends StatefulWidget {
   const MultiStepRegisterPage({super.key});
@@ -796,6 +1335,7 @@ class MultiStepRegisterPage extends StatefulWidget {
 class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
   int _currentStep = 0;
   final PageController _pageController = PageController();
+  final _step1FormKey = GlobalKey<FormState>();
 
   // Step 1: Agency Information
   final _agencyNameController = TextEditingController();
@@ -968,23 +1508,79 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
     super.dispose();
   }
 
+  // Validation methods for Step 1
+  String? _validateAgencyName(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Agency name is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Agency name must be at least 2 characters';
+    }
+    if (value.trim().length > 100) {
+      return 'Agency name must be less than 100 characters';
+    }
+    return null;
+  }
+
+  String? _validateContactPerson(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Contact person name is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Contact person name must be at least 2 characters';
+    }
+    // Allow letters, spaces, hyphens, and apostrophes for names
+    if (!RegExp(r"^[a-zA-Z\s'-]+$").hasMatch(value.trim())) {
+      return 'Contact person name can only contain letters, spaces, hyphens, and apostrophes';
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email is required';
+    }
+    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Please enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _validatePhone(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+    // Remove all non-digit characters for validation
+    final cleanPhone = value.replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanPhone.length != 10) {
+      return 'Phone number must be 10 digits (USA format)';
+    }
+    // Check if it starts with 0 or 1 (invalid area codes)
+    if (cleanPhone.startsWith('0') || cleanPhone.startsWith('1')) {
+      return 'Invalid phone number. Area code cannot start with 0 or 1';
+    }
+    return null;
+  }
+
+  // Phone number formatter for USA format
+  String _formatPhoneNumber(String value) {
+    // Remove all non-digit characters
+    final digits = value.replaceAll(RegExp(r'[^\d]'), '');
+    
+    if (digits.length <= 3) {
+      return digits;
+    } else if (digits.length <= 6) {
+      return '(${digits.substring(0, 3)}) ${digits.substring(3)}';
+    } else {
+      return '(${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6, digits.length > 10 ? 10 : digits.length)}';
+    }
+  }
+
   void _nextStep() {
     if (_currentStep == 0) {
-      // Validate Step 1: Agency Information
-      if (_agencyNameController.text.isEmpty ||
-          _contactNameController.text.isEmpty ||
-          _emailController.text.isEmpty ||
-          _phoneController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Please fill in all agency information')),
-        );
-        return;
-      }
-      if (!_emailController.text.contains('@')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid email')),
-        );
+      // Validate Step 1 form
+      if (!_step1FormKey.currentState!.validate()) {
         return;
       }
     } else if (_currentStep == 1) {
@@ -1706,141 +2302,208 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
   Widget _buildStep1() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Agency Information',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1A202C),
-            ),
-          ),
-          const SizedBox(height: 32),
-          const Text('Agency Name',
-              style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _agencyNameController,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFFF5F7FA),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: Color(0xFF00888C), width: 2),
+      child: Form(
+        key: _step1FormKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Agency Information',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A202C),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text('Contact Person',
-              style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _contactNameController,
-            textCapitalization: TextCapitalization.words,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFFF5F7FA),
-              hintText: 'Enter full name',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: Color(0xFF00888C), width: 2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text('Email', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFFF5F7FA),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: Color(0xFF00888C), width: 2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text('Phone', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFFF5F7FA),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: Color(0xFF00888C), width: 2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _nextStep,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00888C),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
+            const SizedBox(height: 32),
+            const Text('Agency Name',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _agencyNameController,
+              validator: _validateAgencyName,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                hintText: 'Enter agency name',
+                border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
                 ),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Next Step',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward, size: 20),
-                ],
+            ),
+            const SizedBox(height: 16),
+            const Text('Contact Person',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _contactNameController,
+              validator: _validateContactPerson,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                hintText: 'Enter full name',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            const Text('Email', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _emailController,
+              validator: _validateEmail,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                hintText: 'example@email.com',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Phone', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _phoneController,
+              validator: _validatePhone,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+                TextInputFormatter.withFunction((oldValue, newValue) {
+                  if (newValue.text.isEmpty) {
+                    return newValue;
+                  }
+                  final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+                  if (digits.length > 10) {
+                    return oldValue;
+                  }
+                  final formatted = _formatPhoneNumber(digits);
+                  return TextEditingValue(
+                    text: formatted,
+                    selection: TextSelection.collapsed(offset: formatted.length),
+                  );
+                }),
+              ],
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                hintText: '(555) 123-4567',
+                prefixText: '+1 ',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF00888C), width: 2),
+                ),
+                errorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 1),
+                ),
+                focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _nextStep,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00888C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Next Step',
+                        style:
+                            TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    SizedBox(width: 8),
+                    Icon(Icons.arrow_forward, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -8019,14 +8682,27 @@ class _LeadsPageState extends State<LeadsPage> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: nameController,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      textCapitalization: TextCapitalization.words,
                       decoration: InputDecoration(
                         hintText: 'e.g., John Smith',
                         prefixIcon: const Icon(Icons.person),
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
-                      validator: (v) =>
-                          v == null || v.isEmpty ? 'Name is required' : null,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Name is required';
+                        }
+                        if (v.trim().length < 2) {
+                          return 'Name must be at least 2 characters';
+                        }
+                        // Allow letters, spaces, hyphens, and apostrophes for names
+                        if (!RegExp(r"^[a-zA-Z\s'-]+$").hasMatch(v.trim())) {
+                          return 'Name can only contain letters, spaces, hyphens, and apostrophes';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 16),
 
@@ -8045,16 +8721,31 @@ class _LeadsPageState extends State<LeadsPage> {
                               const SizedBox(height: 8),
                               TextFormField(
                                 controller: ageController,
+                                autovalidateMode: AutovalidateMode.onUserInteraction,
                                 keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(3),
+                                ],
                                 decoration: InputDecoration(
                                   hintText: 'e.g., 75',
                                   prefixIcon: const Icon(Icons.calendar_today),
                                   border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8)),
                                 ),
-                                validator: (v) => v == null || v.isEmpty
-                                    ? 'Age is required'
-                                    : null,
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) {
+                                    return 'Age is required';
+                                  }
+                                  final age = int.tryParse(v);
+                                  if (age == null) {
+                                    return 'Age must be a number';
+                                  }
+                                  if (age < 0 || age > 150) {
+                                    return 'Age must be between 0 and 150';
+                                  }
+                                  return null;
+                                },
                               ),
                             ],
                           ),
@@ -8073,16 +8764,31 @@ class _LeadsPageState extends State<LeadsPage> {
                               const SizedBox(height: 8),
                               TextFormField(
                                 controller: phoneController,
+                                autovalidateMode: AutovalidateMode.onUserInteraction,
                                 keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(10),
+                                ],
                                 decoration: InputDecoration(
                                   hintText: '(214) 555-0123',
                                   prefixIcon: const Icon(Icons.phone),
                                   border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8)),
                                 ),
-                                validator: (v) => v == null || v.isEmpty
-                                    ? 'Phone is required'
-                                    : null,
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) {
+                                    return 'Phone is required';
+                                  }
+                                  final cleanPhone = v.replaceAll(RegExp(r'[^\d]'), '');
+                                  if (cleanPhone.length != 10) {
+                                    return 'Phone must be 10 digits (USA format)';
+                                  }
+                                  if (cleanPhone.startsWith('0') || cleanPhone.startsWith('1')) {
+                                    return 'Invalid area code';
+                                  }
+                                  return null;
+                                },
                               ),
                             ],
                           ),
@@ -8100,13 +8806,24 @@ class _LeadsPageState extends State<LeadsPage> {
                     const SizedBox(height: 8),
                     TextFormField(
                       controller: emailController,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       keyboardType: TextInputType.emailAddress,
+                      autocorrect: false,
                       decoration: InputDecoration(
                         hintText: 'john@example.com',
                         prefixIcon: const Icon(Icons.email),
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
+                      validator: (v) {
+                        if (v != null && v.isNotEmpty) {
+                          final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                          if (!emailRegex.hasMatch(v.trim())) {
+                            return 'Please enter a valid email address';
+                          }
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 16),
 
@@ -14170,8 +14887,14 @@ class _SettingsPageState extends State<SettingsPage> {
                                   child: const Text('Cancel'),
                                 ),
                                 ElevatedButton(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     Navigator.pop(context);
+                                    // ✅ PROPERLY LOGOUT - Clear token and user data
+                                    await AuthService.logout();
+                                    // Clear all local storage
+                                    final prefs = await SharedPreferences.getInstance();
+                                    await prefs.clear();
+                                    // Navigate to login
                                     Navigator.pushReplacementNamed(
                                         context, '/');
                                   },

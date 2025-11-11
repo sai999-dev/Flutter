@@ -14,14 +14,17 @@ class AuthService {
     String? phone,
     Map<String, dynamic>? additionalData,
   }) async {
-    print('🔐 Registering new agency: $email');
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedPassword = password.trim();
+    
+    print('🔐 Registering new agency: $normalizedEmail');
 
     try {
       final body = {
-        'email': email,
-        'password': password,
-        'agency_name': agencyName,
-        if (phone != null) 'phone': phone,
+        'email': normalizedEmail,
+        'password': normalizedPassword,
+        'agency_name': agencyName.trim(),
+        if (phone != null) 'phone': phone.trim(),
         ...?additionalData,
       };
 
@@ -143,15 +146,26 @@ class AuthService {
   /// Returns JWT token and user profile
   static Future<Map<String, dynamic>> login(
       String email, String password) async {
-    print('🔐 Attempting login: $email');
+    // ✅ TRIM AND NORMALIZE EMAIL (lowercase, no whitespace)
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedPassword = password.trim();
+    
+    print('🔐 Attempting login: $normalizedEmail');
+    print('🔐 Password length: ${normalizedPassword.length}');
+    
+    // ✅ CLEAR ANY EXISTING TOKEN BEFORE LOGIN (in case of expired/invalid token)
+    // This ensures we don't send an invalid token that might cause 401
+    await ApiClient.clearToken();
+    print('🧹 Cleared any existing token before login');
 
     try {
       final response = await ApiClient.post(
         '/api/mobile/auth/login',
         {
-          'email': email,
-          'password': password,
+          'email': normalizedEmail,
+          'password': normalizedPassword,
         },
+        requireAuth: false, // Login is a public endpoint - don't send JWT token
       );
 
       if (response == null) {
@@ -189,22 +203,38 @@ class AuthService {
         print('✅ Login successful');
         return decoded;
       } else {
-        // Handle error response
+        // Handle error response with detailed logging
         String errorMessage = 'Login failed';
+        Map<String, dynamic>? errorData;
+        
         try {
-          final errorData = json.decode(response.body);
+          errorData = json.decode(response.body) as Map<String, dynamic>;
           errorMessage = (errorData['message'] ?? 
               errorData['error'] ?? 
               errorData['msg'] ??
-              'Login failed').toString();
+              'Invalid credentials').toString();
+          
           print('❌ Login failed: $errorMessage');
           print('❌ Status code: ${response.statusCode}');
-          print('❌ Response body: ${response.body}');
+          print('❌ Email attempted: $normalizedEmail');
+          print('❌ Full error response: ${response.body}');
+          
+          // Check for specific error types
+          if (errorMessage.toLowerCase().contains('password') || 
+              errorMessage.toLowerCase().contains('invalid') ||
+              errorMessage.toLowerCase().contains('credentials')) {
+            errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+          } else if (errorMessage.toLowerCase().contains('not found') ||
+                     errorMessage.toLowerCase().contains('does not exist')) {
+            errorMessage = 'No account found with this email address. Please check your email or create an account.';
+          }
         } catch (parseError) {
           // If response body is not JSON, use status code
           errorMessage = 'Login failed (Status: ${response.statusCode})';
           print('❌ Login failed - Invalid JSON response: ${response.body}');
+          print('❌ Parse error: $parseError');
         }
+        
         throw Exception(errorMessage);
       }
     } catch (e) {
@@ -391,17 +421,21 @@ class AuthService {
     return ApiClient.isAuthenticated;
   }
 
-  /// Request password reset
+  /// Request password reset - sends 6-digit verification code to email
   /// POST /api/mobile/auth/forgot-password
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
-    print('🔐 Requesting password reset for: $email');
+    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
+    final normalizedEmail = email.trim().toLowerCase();
+    
+    print('🔐 Requesting password reset for: $normalizedEmail');
 
     try {
       final response = await ApiClient.post(
         '/api/mobile/auth/forgot-password',
         {
-          'email': email,
+          'email': normalizedEmail,
         },
+        requireAuth: false, // Public endpoint
       );
 
       if (response == null) {
@@ -411,7 +445,7 @@ class AuthService {
       final decoded = json.decode(response.body) as Map<String, dynamic>;
 
       if (response.statusCode == 200 && decoded['success'] == true) {
-        print('✅ Password reset requested successfully');
+        print('✅ Password reset code sent successfully');
         return decoded;
       } else {
         final message = (decoded['message'] ?? 'Failed to request password reset').toString();
@@ -419,6 +453,93 @@ class AuthService {
       }
     } catch (e) {
       print('❌ Forgot password error: $e');
+      rethrow;
+    }
+  }
+
+  /// Verify 6-digit code sent to email
+  /// POST /api/mobile/auth/verify-reset-code
+  static Future<Map<String, dynamic>> verifyResetCode(String email, String code) async {
+    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedCode = code.trim();
+    
+    print('🔐 Verifying reset code for: $normalizedEmail');
+
+    try {
+      final response = await ApiClient.post(
+        '/api/mobile/auth/verify-reset-code',
+        {
+          'email': normalizedEmail,
+          'code': normalizedCode,
+        },
+        requireAuth: false, // Public endpoint
+      );
+
+      if (response == null) {
+        throw Exception('No response from server');
+      }
+
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200 && decoded['success'] == true) {
+        print('✅ Reset code verified successfully');
+        return decoded;
+      } else {
+        final message = (decoded['message'] ?? 'Invalid or expired verification code').toString();
+        throw Exception(message);
+      }
+    } catch (e) {
+      print('❌ Verify reset code error: $e');
+      rethrow;
+    }
+  }
+
+  /// Reset password with new password after code verification
+  /// POST /api/mobile/auth/reset-password
+  static Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedCode = code.trim();
+    final normalizedPassword = newPassword.trim();
+    
+    print('🔐 Resetting password for: $normalizedEmail');
+
+    // Validate password strength
+    if (normalizedPassword.length < 6) {
+      throw Exception('Password must be at least 6 characters long');
+    }
+
+    try {
+      final response = await ApiClient.post(
+        '/api/mobile/auth/reset-password',
+        {
+          'email': normalizedEmail,
+          'code': normalizedCode,
+          'new_password': normalizedPassword,
+        },
+        requireAuth: false, // Public endpoint
+      );
+
+      if (response == null) {
+        throw Exception('No response from server');
+      }
+
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200 && decoded['success'] == true) {
+        print('✅ Password reset successfully');
+        return decoded;
+      } else {
+        final message = (decoded['message'] ?? 'Failed to reset password').toString();
+        throw Exception(message);
+      }
+    } catch (e) {
+      print('❌ Reset password error: $e');
       rethrow;
     }
   }

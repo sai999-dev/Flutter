@@ -44,19 +44,30 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
   }
 
   Future<void> _pickDocument() async {
+    setState(() {
+      _uploadError = null;
+    });
+    
     try {
+      print('📂 Opening file picker...');
       final filePath = await DocumentVerificationService.pickDocument();
-      if (filePath != null && mounted) {
+      
+      if (filePath != null && filePath.isNotEmpty && mounted) {
+        print('✅ File selected successfully: $filePath');
         setState(() {
           _selectedFilePath = filePath;
           _selectedFileName = path.basename(filePath);
           _uploadError = null;
         });
+      } else if (mounted) {
+        print('ℹ️ No file selected (user cancelled)');
+        // Don't show error if user just cancelled
       }
     } catch (e) {
+      print('❌ File picker error: $e');
       if (mounted) {
         setState(() {
-          _uploadError = 'Failed to pick document: $e';
+          _uploadError = 'Failed to select file: ${e.toString()}. Please try again or use the camera option.';
         });
       }
     }
