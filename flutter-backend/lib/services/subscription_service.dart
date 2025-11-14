@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'api_client.dart';
+import '../config/api_config.dart';
 
 /// Subscription Management Service
 /// Fetches plans from Super Admin Portal API endpoint
@@ -27,7 +28,7 @@ class SubscriptionService {
 
       if (response == null) {
         print('❌ No response from server - backend may not be running');
-        print('💡 Make sure your backend server is running on http://localhost:3000, 3001, or 3002');
+        print('💡 Make sure your backend server is running on ${ApiConfig.activeBaseUrl}');
         return [];
       }
 

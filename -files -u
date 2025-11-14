@@ -1,0 +1,78 @@
+[1mdiff --cc flutter-frontend/lib/main.dart[m
+[1mindex 49fba1c,daf4987..ae53330[m
+[1m--- a/flutter-frontend/lib/main.dart[m
+[1m+++ b/flutter-frontend/lib/main.dart[m
+[36m@@@ -29,41 -28,10 +28,16 @@@[m [mimport 'widgets/document_verification_p[m
+  void main() async {[m
+    WidgetsFlutterBinding.ensureInitialized();[m
+  [m
+[31m--  // Clear cached API URL to force fresh detection[m
+[31m--  await ApiClient.clearCachedUrl();[m
+[31m-   [m
+[31m-   // ✅ DISABLE TEST MODE - Use live backend[m
+[31m-   final prefs = await SharedPreferences.getInstance();[m
+[31m-   await prefs.setBool('test_mode', false);[m
+[31m-   print('✅ Test mode disabled - Using live backend');[m
+[31m- [m
+[31m-   // Initialize Stripe (publishable key only) - with error handling[m
+[31m-   // Only initialize on mobile platforms (iOS/Android) - skip on web/desktop[m
+[31m-   if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android)) {[m
+[31m-     try {[m
+[31m-       stripe.Stripe.publishableKey = StripeConfig.publishableKey;[m
+[31m-       stripe.Stripe.merchantIdentifier = StripeConfig.merchantIdentifier;[m
+[31m-       await stripe.Stripe.instance.applySettings();[m
+[31m-       print('✅ Stripe initialized successfully');[m
+[31m-     } catch (e) {[m
+[31m-       // Stripe initialization failed - app can still run without payment features[m
+[31m-       print('⚠️ Stripe initialization failed: $e');[m
+[31m-       print('⚠️ App will continue without Stripe payment features');[m
+[31m-     }[m
+[31m-   } else {[m
+[31m-     print('ℹ️ Skipping Stripe initialization on ${kIsWeb ? "web" : defaultTargetPlatform} platform');[m
+[31m-   }[m
+[31m- [m
+[31m-   // Initialize API client[m
+[32m +  try {[m
+[31m-   await ApiClient.initialize();[m
+[31m-     print('✅ API client initialized successfully');[m
+[32m++    // Clear cached API URL to force fresh detection[m
+[32m++    await ApiClient.clearCachedUrl();[m
+[32m+ [m
+[31m -  await ApiClient.initialize();[m
+[32m++    await ApiClient.initialize();[m
+[32m +  } catch (e) {[m
+[31m-     print('⚠️ API client initialization warning: $e');[m
+[31m-     // Continue anyway - API client will handle connection errors later[m
+[32m++    // If initialization fails, continue anyway - app can work offline[m
+[32m++    print('⚠️ API Client initialization warning: $e');[m
+[32m +  }[m
+[31m- [m
+[31m-   // Run the app[m
+[32m++  [m
+    runApp(const HealthcareApp());[m
+  }[m
+  [m
+[1mdiff --cc flutter-frontend/test/widget_test.dart[m
+[1mindex 0000000,1928311..f6ec05f[m
+mode 000000,100644..100644[m
+[1m--- a/flutter-frontend/test/widget_test.dart[m
+[1m+++ b/flutter-frontend/test/widget_test.dart[m
+[36m@@@ -1,0 -1,17 +1,17 @@@[m
+[32m+ import 'package:flutter/material.dart';[m
+[32m+ import 'package:flutter_test/flutter_test.dart';[m
+[32m+ import 'package:starboy_analytica/main.dart';[m
+[32m+ [m
+[32m+ void main() {[m
+[32m+   testWidgets('App launches successfully', (WidgetTester tester) async {[m
+[32m+     // Build our app and trigger a frame.[m
+[31m -    await tester.pumpWidget(const MyApp());[m
+[32m++    await tester.pumpWidget(const HealthcareApp());[m
+[32m+ [m
+[32m+     // Verify that the app renders[m
+[32m+     expect(find.byType(MaterialApp), findsOneWidget);[m
+[32m+   });[m
+[32m+ [m
+[32m+   // Add more widget tests here as needed[m
+[32m+   // Example: Test login screen, test subscription page, etc.[m
+[32m+ }[m
+[32m+ [m

@@ -2,31 +2,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../storage/secure_storage_service.dart';
+import '../config/api_config.dart';
 
 /// Centralized API client with JWT token management
 /// Uses secure storage for JWT tokens (production-grade security)
 class ApiClient {
   // Backend API Middleware Layer (Separate Repository)
   // Connects to unified backend that exposes /api/mobile/* endpoints
-  // Supports multiple ports for development flexibility
-  
-  // Production API URL - Replace with your actual production backend URL
-  // For separate deployment, set this to your deployed backend API URL
-  static const String? productionApiUrl = null; // Set to: 'https://your-api-domain.com'
+  // Uses ApiConfig for centralized base URL management
   
   static List<String> get baseUrls {
-    // If production URL is set, use it; otherwise fall back to development URLs
-    if (productionApiUrl != null && productionApiUrl!.isNotEmpty) {
-      return [productionApiUrl!];
-    }
-    // Development URLs (only used when productionApiUrl is null)
+    // Use the active base URL from ApiConfig as the primary URL
+    // Fallback to localhost variants for development flexibility
     return [
-      'http://127.0.0.1:3002',
-      'http://localhost:3002',
-      'http://127.0.0.1:3001',
+      ApiConfig.activeBaseUrl,
       'http://localhost:3001',
-      'http://127.0.0.1:3000',
-      'http://localhost:3000',
+      'http://127.0.0.1:3001',
     ];
   }
 

@@ -40,7 +40,7 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
       final status = await DocumentVerificationService.getVerificationStatus();
       
       // Load documents list (now handles errors gracefully)
-      final documents = await DocumentVerificationService.getDocuments();
+      final documents = await DocumentVerificationService.getDocuments(agencyId: widget.agencyId);
 
       if (mounted) {
         setState(() {
@@ -75,12 +75,6 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
       context: context,
       builder: (context) => DocumentUploadDialog(
         agencyId: widget.agencyId,
-        onSkip: () {
-          Navigator.pop(context, false);
-        },
-        onUpload: () {
-          Navigator.pop(context, true);
-        },
       ),
     );
 
