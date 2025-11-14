@@ -780,20 +780,30 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       setState(() => _isLoadingEmail = false);
 
       String errorMessage = 'Failed to send verification code';
-      if (e.toString().contains('Exception:')) {
-        errorMessage = e.toString().replaceFirst('Exception: ', '');
-      } else if (e.toString().contains('not found') ||
-          e.toString().contains('does not exist')) {
+      final errorString = e.toString();
+      
+      if (errorString.contains('Exception:')) {
+        errorMessage = errorString.replaceFirst('Exception: ', '');
+      } else if (errorString.contains('Server error')) {
+        errorMessage = errorString.replaceFirst('Exception: ', '');
+      } else if (errorString.contains('not found') ||
+          errorString.contains('does not exist')) {
         errorMessage = 'No account found with this email address';
+      } else if (errorString.contains('timeout')) {
+        errorMessage = 'Connection timeout. Please check your internet connection.';
+      } else if (errorString.contains('No backend server')) {
+        errorMessage = 'Backend server is not running. Please start the server.';
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ $errorMessage'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ $errorMessage'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 

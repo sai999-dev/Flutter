@@ -259,9 +259,9 @@ class DocumentVerificationService {
   }
 
   /// Get uploaded documents list
-  /// GET /api/mobile/auth/documents
-  static Future<List<Map<String, dynamic>>> getDocuments() async {
-    print('📄 Fetching uploaded documents...');
+  /// GET /api/v1/agencies/{agencyId}/documents
+  static Future<List<Map<String, dynamic>>> getDocuments({required String agencyId}) async {
+    print('📄 Fetching uploaded documents for agency: $agencyId');
 
     try {
       // Ensure API client is initialized and token is loaded
@@ -273,13 +273,50 @@ class DocumentVerificationService {
         return [];
       }
 
-      final response = await ApiClient.get(
-        '/api/mobile/auth/documents',
-        requireAuth: true,
-      );
+      // Get JWT token for Authorization header
+      final token = ApiClient.token;
+      if (token == null) {
+        print('⚠️ No authentication token found - returning empty list');
+        return [];
+      }
 
-      if (response == null || response.statusCode != 200) {
-        print('⚠️ Failed to fetch documents: ${response?.statusCode} - returning empty list');
+      // Discover backend URL
+      final baseUrls = ApiClient.baseUrlsList;
+      String? baseUrl;
+      
+      for (final url in baseUrls) {
+        try {
+          final healthCheck = await http.get(
+            Uri.parse('$url/api/health'),
+          ).timeout(const Duration(seconds: 2));
+          if (healthCheck.statusCode == 200) {
+            baseUrl = url;
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (baseUrl == null) {
+        print('⚠️ Backend not available - returning empty list');
+        return [];
+      }
+
+      // Use new endpoint: /api/v1/agencies/{agencyId}/documents
+      final endpoint = '$baseUrl/api/v1/agencies/$agencyId/documents';
+      print('🌐 Fetching documents from: $endpoint');
+
+      final response = await http.get(
+        Uri.parse(endpoint),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode != 200) {
+        print('⚠️ Failed to fetch documents: ${response.statusCode} - ${response.body}');
         return [];
       }
 

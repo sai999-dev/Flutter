@@ -440,7 +440,22 @@ class AuthService {
       );
 
       if (response == null) {
-        throw Exception('No response from server');
+        throw Exception('No response from server - Backend server may not be running');
+      }
+
+      // Handle server errors (500, 502, 503, etc.)
+      if (response.statusCode >= 500) {
+        print('❌ Server error (${response.statusCode}): ${response.body}');
+        try {
+          final decoded = json.decode(response.body) as Map<String, dynamic>;
+          final message = decoded['message'] ?? decoded['error'] ?? 'Server error occurred';
+          throw Exception('Server error: $message. Please try again later or contact support.');
+        } catch (e) {
+          if (e.toString().contains('Server error:')) {
+            rethrow;
+          }
+          throw Exception('Server error (${response.statusCode}). Please check backend logs or try again later.');
+        }
       }
 
       final decoded = json.decode(response.body) as Map<String, dynamic>;
@@ -449,12 +464,19 @@ class AuthService {
         print('✅ Password reset code sent successfully');
         return decoded;
       } else {
-        final message = (decoded['message'] ?? 'Failed to request password reset').toString();
+        // Handle client errors (400, 404, etc.)
+        final message = (decoded['message'] ?? decoded['error'] ?? 'Failed to request password reset').toString();
+        print('❌ Client error (${response.statusCode}): $message');
         throw Exception(message);
       }
     } catch (e) {
       print('❌ Forgot password error: $e');
-      rethrow;
+      // If it's already a formatted exception, rethrow as-is
+      if (e.toString().contains('Exception:')) {
+        rethrow;
+      }
+      // Otherwise wrap it
+      throw Exception('Failed to request password reset: ${e.toString()}');
     }
   }
 
