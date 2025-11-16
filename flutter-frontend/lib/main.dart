@@ -29,11 +29,21 @@ import 'package:flutter_backend/services/api_client.dart';
 import 'package:flutter_backend/services/subscription_service.dart';
 // Frontend Widgets
 import 'widgets/document_verification_page.dart';
+import 'widgets/lead_popup_service.dart';
+import 'services/realtime_lead_listener.dart';
 // Mobile App - Agency Self-Service Portal
 // Backend API is in separate repository (middleware layer)
 
-void main() async {
+
+import 'package:supabase_flutter/supabase_flutter.dart';
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: 'https://ioqjonxjptvshdwhbuzv.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvcWpvbnhqcHR2c2hkd2hidXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0ODM0MjUsImV4cCI6MjA3NzA1OTQyNX0.vMF8X2B0p5MFb2huro5kRBPAerkvQ2iKLclhCQMyW9w',
+  );
 
   // Clear cached API URL to force fresh detection
   await ApiClient.clearCachedUrl();
@@ -82,6 +92,7 @@ class HealthcareApp extends StatelessWidget {
   Widget build(BuildContext context) {
     const primaryTeal = Color(0xFF00888C);
     return MaterialApp(
+      navigatorKey: LeadPopupService.navigatorKey,
       title: 'Healthcare Leads Pro',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -492,6 +503,11 @@ class _LoginPageState extends State<LoginPage> {
       }
       if (agencyName.toString().isNotEmpty) {
         await prefs.setString('agency_name', agencyName.toString());
+      }
+
+      // Start realtime lead listener for this agency
+      if (agencyId.toString().isNotEmpty) {
+        RealtimeLeadListener.startListening(agencyId.toString());
       }
 
       // Save email
@@ -2464,8 +2480,7 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
           const Text('Industry', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
@@ -2523,44 +2538,20 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide:
-                      const BorderSide(color: Color(0xFF00888C), width: 2),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.red, width: 1),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.red, width: 2),
                 ),
               ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _nextStep,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00888C),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Next Step',
-                        style:
-                            TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                    SizedBox(width: 8),
-                    Icon(Icons.arrow_forward, size: 20),
-                  ],
-                ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Next Step',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_forward, size: 20),
+                ],
               ),
             ),
+          ),
           ],
         ),
       ),
@@ -3763,7 +3754,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           color: Colors.black87)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedState,
+                    value: selectedState,
                     decoration: const InputDecoration(
                       labelText: 'Choose State',
                       labelStyle: TextStyle(color: Colors.black87),
@@ -3799,7 +3790,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             color: Colors.black87)),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCity,
+                      value: selectedCity,
                       decoration: const InputDecoration(
                         labelText: 'Choose City',
                         labelStyle: TextStyle(color: Colors.black87),
@@ -8072,7 +8063,7 @@ class _LeadsPageState extends State<LeadsPage> {
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: selectedStatus,
+                  value: selectedStatus,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     contentPadding:
@@ -8207,7 +8198,7 @@ class _LeadsPageState extends State<LeadsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _selectedPriority,
+                value: _selectedPriority,
                 decoration: const InputDecoration(
                   labelText: 'Priority',
                   border: OutlineInputBorder(),
@@ -8223,7 +8214,7 @@ class _LeadsPageState extends State<LeadsPage> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: _selectedStatus,
+                value: _selectedStatus,
                 decoration: const InputDecoration(
                   labelText: 'Status',
                   border: OutlineInputBorder(),
@@ -8963,7 +8954,7 @@ class _LeadsPageState extends State<LeadsPage> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCareType,
+                      value: selectedCareType,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.medical_services),
                         border: OutlineInputBorder(
@@ -8990,7 +8981,7 @@ class _LeadsPageState extends State<LeadsPage> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedUrgency,
+                      value: selectedUrgency,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.priority_high),
                         border: OutlineInputBorder(
@@ -15382,7 +15373,12 @@ Security Incidents: security@healthcareleadspro.com
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeThumbColor: const Color(0xFF1E40AF),
+        thumbColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF1E40AF);
+          }
+          return Colors.grey;
+        }),
       ),
     );
   }
