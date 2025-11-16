@@ -1,3 +1,6 @@
+apply plugin: 'com.google.gms.google-services'
+
+
 plugins {
     id "com.android.application"
     id "kotlin-android"
@@ -38,7 +41,7 @@ android {
 
     defaultConfig {
         applicationId "com.starboyanalytica.app"
-        minSdk 21
+        minSdk 23
         targetSdk 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
@@ -72,6 +75,10 @@ flutter {
 }
 
 dependencies {
+    implementation platform('com.google.firebase:firebase-bom:33.3.0')
+implementation 'com.google.firebase:firebase-messaging'
+
     implementation 'androidx.multidex:multidex:2.0.1'
 }
+
 
