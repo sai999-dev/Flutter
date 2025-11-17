@@ -9,6 +9,7 @@ export 'services/subscription_service.dart';
 export 'services/territory_service.dart';
 export 'services/notification_service.dart';
 export 'services/document_verification_service.dart';
+export 'services/audit_logs_service.dart';
 // Note: subscription_plan_service.dart not exported due to name conflict
 
 // Storage

@@ -27,6 +27,7 @@ import 'package:flutter_backend/services/notification_service.dart';
 import 'package:flutter_backend/services/territory_service.dart';
 import 'package:flutter_backend/services/api_client.dart';
 import 'package:flutter_backend/services/subscription_service.dart';
+import 'package:flutter_backend/services/audit_logs_service.dart';
 // Frontend Widgets
 import 'widgets/document_verification_page.dart';
 import 'widgets/lead_popup_service.dart';
@@ -5324,12 +5325,27 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
 
   Future<void> _loadDashboardData() async {
     try {
-      // ✅ USE NEW LEADSERVICE - Fetch real leads from mobile API
-      final allLeads = await LeadService.getLeads(excludeRejected: true);
+      // Get agency ID for fetching communicated leads
+      final agencyId = await AuthService.getAgencyId();
+
+      if (agencyId == null) {
+        print('❌ Agency ID not found');
+        if (mounted) {
+          setState(() {
+            _recentLeads = [];
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // ✅ FETCH LEADS FROM AUDIT_LOGS - Get communicated/assigned leads
+      print('📊 Fetching leads from audit_logs for agency: $agencyId');
+      final auditLeads = await AuditLogsService.getAssignedLeads(agencyId);
 
       // DEBUG: Print sample data
-      if (allLeads.isNotEmpty) {
-        print('📊 Sample lead data from API: ${allLeads[0]}');
+      if (auditLeads.isNotEmpty) {
+        print('📊 Sample lead data from audit_logs: ${auditLeads[0]}');
       }
 
       // ✅ FILTER LEADS BY USER'S SELECTED ZIPCODES
@@ -5337,7 +5353,7 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
           widget.userZipcodes.map((z) => z['zipcode'] ?? '').toList();
       print('🔍 Filtering leads for zipcodes: $userZipcodeStrings');
 
-      final filteredLeads = allLeads.where((lead) {
+      final filteredLeads = auditLeads.where((lead) {
         final leadZipcode = lead['zipcode']?.toString() ?? '';
         final matches = userZipcodeStrings.contains(leadZipcode);
         if (matches) {
@@ -5346,6 +5362,9 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
         }
         return matches;
       }).toList();
+
+      // Also get regular leads from API for stats calculation
+      final allLeads = await LeadService.getLeads(excludeRejected: true);
 
       print('📊 Total leads in DB: ${allLeads.length}');
       print('✅ Filtered leads matching zipcodes: ${filteredLeads.length}');

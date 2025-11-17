@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_backend/services/lead_service.dart';
 import 'package:flutter_backend/services/auth_service.dart';
+import 'package:flutter_backend/services/audit_logs_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -500,21 +501,34 @@ class LeadPopupService {
       try {
         print('📞 Communicating with lead: $leadId');
 
-        // Update lead status to contacted
+        // Get agency ID
+        final agencyId = await AuthService.getAgencyId();
+        if (agencyId == null) {
+          throw Exception('Agency ID not found');
+        }
+
+        // Update lead status to contacted in backend
         await LeadService.updateLeadStatus(leadId, 'contacted',
             notes: 'User chose to communicate via realtime notification');
         await LeadService.markAsViewed(leadId);
 
+        // Save to audit_logs for dashboard display
+        await AuditLogsService.markAsCommunicated(
+          agencyId,
+          leadId,
+          lead,
+        );
+
         // Clear cache to ensure fresh data
         await LeadService.clearCache();
 
-        print('✅ Lead marked as contacted and saved: $leadId');
+        print('✅ Lead marked as contacted and saved to dashboard: $leadId');
 
         if (context.mounted) {
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('✅ Lead saved successfully! Check your dashboard.'),
+                content: Text('✅ Lead saved to dashboard! Check your leads.'),
                 backgroundColor: Color(0xFF10B981),
                 duration: Duration(seconds: 3)),
           );
