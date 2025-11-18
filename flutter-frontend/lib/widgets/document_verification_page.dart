@@ -36,26 +36,53 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
     });
 
     try {
-      // Load verification status (now handles errors gracefully)
-      final status = await DocumentVerificationService.getVerificationStatus();
-      
-      // Load documents list (now handles errors gracefully)
+      // Load documents list (this is the source of truth)
       final documents = await DocumentVerificationService.getDocuments(agencyId: widget.agencyId);
+
+      // Derive verification status from documents
+      String documentStatus = 'no_document';
+      String statusMessage = 'No documents uploaded yet';
+
+      if (documents.isNotEmpty) {
+        // Check if any document is approved
+        final hasApproved = documents.any((doc) {
+          final status = doc['verification_status'] ?? doc['status'] ?? '';
+          return status.toString().toLowerCase() == 'approved';
+        });
+
+        // Check if any document is rejected (but not approved)
+        final hasRejected = documents.any((doc) {
+          final status = doc['verification_status'] ?? doc['status'] ?? '';
+          return status.toString().toLowerCase() == 'rejected';
+        });
+
+        if (hasApproved) {
+          documentStatus = 'approved';
+          statusMessage = 'Verification completed - Your documents have been approved';
+        } else if (hasRejected) {
+          documentStatus = 'rejected';
+          statusMessage = 'Some documents were rejected. Please upload new documents.';
+        } else {
+          // Documents exist but all are pending
+          documentStatus = 'pending';
+          statusMessage = 'Documents uploaded - Verification pending review';
+        }
+      }
 
       if (mounted) {
         setState(() {
-          _verificationStatus = status;
+          _verificationStatus = {
+            'document_status': documentStatus,
+            'message': statusMessage,
+          };
           _documents = documents;
           _isLoading = false;
-          // Clear error if we got a response (even if it's default status)
           _error = null;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          // Only show error if it's a critical error
-          // getVerificationStatus now returns default status instead of throwing
           _error = e.toString().contains('Authentication required') 
               ? 'Please log in to view verification status'
               : null;
@@ -115,7 +142,7 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
   String _getStatusText(String? status) {
     switch (status) {
       case 'approved':
-        return 'Approved';
+        return 'Verification Completed';
       case 'pending':
         return 'Pending Review';
       case 'rejected':
@@ -125,6 +152,11 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
       default:
         return 'Unknown';
     }
+  }
+
+  // Helper to get status from document (handles both field names)
+  String? _getDocumentStatus(Map<String, dynamic> doc) {
+    return doc['verification_status'] ?? doc['status'];
   }
 
   @override
@@ -356,14 +388,14 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
                                         'Type: ${doc['document_type'] ?? 'Unknown'}',
                                       ),
                                       Text(
-                                        'Status: ${_getStatusText(doc['verification_status'])}',
+                                        'Status: ${_getStatusText(_getDocumentStatus(doc))}',
                                         style: TextStyle(
                                           color: _getStatusColor(
-                                                  doc['verification_status']) ==
+                                                  _getDocumentStatus(doc)) ==
                                               'green'
                                               ? Colors.green
                                               : _getStatusColor(
-                                                      doc['verification_status']) ==
+                                                      _getDocumentStatus(doc)) ==
                                                   'orange'
                                                   ? Colors.orange
                                                   : Colors.red,
@@ -373,13 +405,13 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
                                     ],
                                   ),
                                   trailing: Icon(
-                                    _getStatusIcon(doc['verification_status']),
+                                    _getStatusIcon(_getDocumentStatus(doc)),
                                     color: _getStatusColor(
-                                            doc['verification_status']) ==
+                                            _getDocumentStatus(doc)) ==
                                         'green'
                                         ? Colors.green
                                         : _getStatusColor(
-                                                doc['verification_status']) ==
+                                                _getDocumentStatus(doc)) ==
                                             'orange'
                                             ? Colors.orange
                                             : Colors.red,

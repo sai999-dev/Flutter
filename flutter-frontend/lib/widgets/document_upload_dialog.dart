@@ -23,45 +23,28 @@ class DocumentUploadDialog extends StatefulWidget {
 
 class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
   final ImagePicker _picker = ImagePicker();
-  XFile? _cameraImage;
-  PlatformFile? _pickedFile;
-  bool _uploading = false;
   String? _error;
-  String? _uploadedFileName;
   
-  // Document type selection
-  String? _selectedDocumentType;
-  final TextEditingController _otherDocumentTypeController = TextEditingController();
-  
-  // Document type options
-  static const List<Map<String, String>> _documentTypes = [
-    {'value': 'business_license', 'label': 'Business License'},
-    {'value': 'certificate_of_incorporation', 'label': 'Certificate Of Incorporation'},
-    {'value': 'tax_id', 'label': 'Tax ID Document'},
-    {'value': 'other', 'label': 'Other Documents'},
+  // Required document types
+  static const List<String> requiredDocumentTypes = [
+    'business_license',
+    'certificate_of_incorporation',
+    'tax_id',
   ];
   
+  // Track uploading state per document type
+  final Map<String, bool> _uploadingStates = {};
+  
   @override
-  void dispose() {
-    _otherDocumentTypeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _takePhoto() async {
-    try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
-      if (image == null) return;
-      setState(() {
-        _cameraImage = image;
-        _pickedFile = null;
-        _error = null;
-      });
-    } catch (e) {
-      setState(() => _error = "Camera error: $e");
+  void initState() {
+    super.initState();
+    // Initialize uploading states
+    for (var type in requiredDocumentTypes) {
+      _uploadingStates[type] = false;
     }
   }
 
-  Future<void> _pickFile() async {
+  Future<void> _pickFile(String documentType) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -71,27 +54,71 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
 
       if (result == null || result.files.isEmpty) return;
 
-      setState(() {
-        _pickedFile = result.files.first;
-        _cameraImage = null;
-        _error = null;
-      });
-
-      debugPrint('✅ File picked: ${_pickedFile!.name}  bytes: ${_pickedFile!.bytes?.length ?? 0}');
+      final pickedFile = result.files.first;
+      debugPrint('✅ File picked for $documentType: ${pickedFile.name}  bytes: ${pickedFile.bytes?.length ?? 0}');
+      
+      // Upload immediately after picking
+      await _uploadDocument(documentType, pickedFile);
     } catch (e) {
       setState(() => _error = "File picker error: $e");
       debugPrint("❌ File picker exception: $e");
     }
   }
 
-  Future<void> _uploadDocument() async {
+  Future<void> _takePhoto(String documentType) async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+      if (image == null) return;
+      
+      debugPrint('✅ Photo taken for $documentType: ${image.name}');
+      
+      // Upload immediately after taking photo
+      await _uploadDocumentFromCamera(documentType, image);
+    } catch (e) {
+      setState(() => _error = "Camera error: $e");
+    }
+  }
+
+  Future<void> pickAndUploadDocument(String documentType) async {
+    // Show dialog to choose between camera or file picker
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Select Source"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, 'camera'),
+              icon: const Icon(Icons.camera_alt),
+              label: const Text("Take Photo"),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, 'file'),
+              icon: const Icon(Icons.attach_file),
+              label: const Text("Pick File"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (choice == 'camera') {
+      await _takePhoto(documentType);
+    } else if (choice == 'file') {
+      await _pickFile(documentType);
+    }
+  }
+
+  Future<void> _uploadDocument(String documentType, PlatformFile pickedFile) async {
     setState(() {
-      _uploading = true;
+      _uploadingStates[documentType] = true;
       _error = null;
     });
 
     try {
-      debugPrint('📤 Starting document upload...');
+      debugPrint('📤 Starting document upload for $documentType...');
       debugPrint('📋 Agency ID: ${widget.agencyId}');
 
       // Initialize API client and get token
@@ -109,118 +136,66 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
       final uri = Uri.parse(endpoint);
       
       debugPrint('🌐 Upload URL: $endpoint');
-      debugPrint('📝 Request URI: $uri');
 
       // Create multipart request
       final request = http.MultipartRequest('POST', uri);
 
       // Add Authorization header with JWT token
       request.headers['Authorization'] = 'Bearer $token';
-      debugPrint('🔐 Authorization header added');
-
-      // Validate document is selected
-      if (_cameraImage == null && _pickedFile == null) {
-        throw Exception("No document selected.");
-      }
-      
-      // Validate document type is selected
-      if (_selectedDocumentType == null || _selectedDocumentType!.isEmpty) {
-        throw Exception("Please select a document type.");
-      }
-      
-      if (_selectedDocumentType == 'other' && _otherDocumentTypeController.text.trim().isEmpty) {
-        throw Exception("Please enter the document type for 'Other Documents'.");
-      }
 
       // Add file with correct field name 'file' (matches backend)
-      if (_cameraImage != null) {
-        debugPrint('📷 Processing camera image: ${_cameraImage!.name}');
-          final bytes = await _cameraImage!.readAsBytes();
-        debugPrint('📦 Image bytes: ${bytes.length} bytes');
+      debugPrint('📄 Processing picked file: ${pickedFile.name}');
+      
+      if (kIsWeb) {
+        // web path unavailable -> use bytes
+        if (pickedFile.bytes == null) throw Exception("No bytes found in selected file.");
+        debugPrint('📦 File bytes: ${pickedFile.bytes!.length} bytes');
         
-          request.files.add(http.MultipartFile.fromBytes(
-          'file', // ✅ MATCHES BACKEND
-            bytes,
-            filename: _cameraImage!.name,
-          contentType: MediaType.parse(lookupMimeType(_cameraImage!.name) ?? 'image/jpeg'),
+        request.files.add(http.MultipartFile.fromBytes(
+          'file',
+          pickedFile.bytes!,
+          filename: pickedFile.name,
+          contentType: MediaType.parse(lookupMimeType(pickedFile.name) ?? 'application/octet-stream'),
         ));
-        debugPrint('✅ Camera image added to request with field name: file');
-      } else if (_pickedFile != null) {
-        final pf = _pickedFile!;
-        debugPrint('📄 Processing picked file: ${pf.name}');
-        
-        if (kIsWeb) {
-          // web path unavailable -> use bytes
-          if (pf.bytes == null) throw Exception("No bytes found in selected file.");
-          debugPrint('📦 File bytes: ${pf.bytes!.length} bytes');
+      } else {
+        // mobile: check if path is available, otherwise use bytes
+        if (pickedFile.path == null || pickedFile.path!.isEmpty) {
+          if (pickedFile.bytes == null) throw Exception("No bytes found in selected file.");
+          debugPrint('📦 File bytes: ${pickedFile.bytes!.length} bytes');
           
           request.files.add(http.MultipartFile.fromBytes(
-            'file', // ✅ MATCHES BACKEND
-            pf.bytes!,
-            filename: pf.name,
-            contentType: MediaType.parse(lookupMimeType(pf.name) ?? 'application/octet-stream'),
+            'file',
+            pickedFile.bytes!,
+            filename: pickedFile.name,
+            contentType: MediaType.parse(lookupMimeType(pickedFile.name) ?? 'application/octet-stream'),
           ));
-          debugPrint('✅ File bytes added to request with field name: file');
         } else {
-          // mobile: check if path is available, otherwise use bytes
-          if (pf.path == null || pf.path!.isEmpty) {
-            if (pf.bytes == null) throw Exception("No bytes found in selected file.");
-            debugPrint('📦 File bytes: ${pf.bytes!.length} bytes');
-            
-            request.files.add(http.MultipartFile.fromBytes(
-              'file', // ✅ MATCHES BACKEND
-              pf.bytes!,
-              filename: pf.name,
-              contentType: MediaType.parse(lookupMimeType(pf.name) ?? 'application/octet-stream'),
-            ));
-            debugPrint('✅ File bytes added to request with field name: file');
-          } else {
-            // mobile file path works fine
-            debugPrint('📁 File path: ${pf.path}');
-          final file = File(pf.path!);
-            final length = await file.length();
-            debugPrint('📦 File size: $length bytes');
-            
-            final stream = http.ByteStream(file.openRead());
-            request.files.add(http.MultipartFile(
-              'file', // ✅ MATCHES BACKEND
-              stream,
-              length,
-              filename: pf.name,
-              contentType: MediaType.parse(lookupMimeType(pf.path!) ?? 'application/octet-stream'),
-            ));
-            debugPrint('✅ File stream added to request with field name: file');
-          }
+          // mobile file path works fine
+          debugPrint('📁 File path: ${pickedFile.path}');
+          final file = File(pickedFile.path!);
+          final length = await file.length();
+          debugPrint('📦 File size: $length bytes');
+          
+          final stream = http.ByteStream(file.openRead());
+          request.files.add(http.MultipartFile(
+            'file',
+            stream,
+            length,
+            filename: pickedFile.name,
+            contentType: MediaType.parse(lookupMimeType(pickedFile.path!) ?? 'application/octet-stream'),
+          ));
         }
-      }
-
-      // Get document type value (already validated earlier)
-      String documentTypeValue = _selectedDocumentType!;
-      if (_selectedDocumentType == 'other') {
-        // For "Other Documents", use the custom text input
-        if (_otherDocumentTypeController.text.trim().isEmpty) {
-          throw Exception("Please enter the document type for 'Other Documents'.");
-        }
-        documentTypeValue = _otherDocumentTypeController.text.trim();
       }
       
       // Add form fields (using snake_case as backend expects)
       request.fields['agency_id'] = widget.agencyId;
-      request.fields['document_type'] = documentTypeValue; // Use selected document type
+      request.fields['document_type'] = documentType;
       request.fields['description'] = 'Agency verification document';
       
       debugPrint('📋 Form fields added:');
       debugPrint('   - agency_id: ${widget.agencyId}');
-      debugPrint('   - document_type: $documentTypeValue');
+      debugPrint('   - document_type: $documentType');
       debugPrint('   - description: Agency verification document');
-
-      // Log request details
-      debugPrint('📤 Sending multipart request...');
-      debugPrint('   Method: POST');
-      debugPrint('   URL: $endpoint');
-      debugPrint('   Headers: ${request.headers}');
-      debugPrint('   Files count: ${request.files.length}');
-      debugPrint('   Fields: ${request.fields}');
 
       // Send request
       final streamedResponse = await request.send();
@@ -231,11 +206,11 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         debugPrint('✅ Document uploaded successfully!');
-        setState(() => _uploading = false);
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text("✅ Document uploaded successfully")));
-          Navigator.pop(context, true);
+              .showSnackBar(SnackBar(content: Text("✅ ${documentType.replaceAll('_', ' ')} uploaded successfully")));
+          // Close dialog and return true to trigger refresh
+          Navigator.of(context).pop(true);
         }
       } else {
         final errorMsg = "Upload failed: ${resp.statusCode} ${resp.body}";
@@ -244,16 +219,6 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
       }
     } catch (e) {
       debugPrint("❌ Upload error: $e");
-      debugPrint("❌ Error type: ${e.runtimeType}");
-      if (e is Exception) {
-        debugPrint("❌ Exception details: ${e.toString()}");
-      }
-      
-      setState(() {
-        _uploading = false;
-        _error = e.toString();
-      });
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -262,6 +227,106 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
             duration: const Duration(seconds: 5),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingStates[documentType] = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _uploadDocumentFromCamera(String documentType, XFile image) async {
+    setState(() {
+      _uploadingStates[documentType] = true;
+      _error = null;
+    });
+
+    try {
+      debugPrint('📤 Starting document upload for $documentType...');
+      debugPrint('📋 Agency ID: ${widget.agencyId}');
+
+      // Initialize API client and get token
+      await ApiClient.initialize();
+      final token = ApiClient.token;
+      
+      if (token == null || token.isEmpty) {
+        throw Exception("Authentication required. Please log in first.");
+      }
+      
+      debugPrint('🔑 JWT Token found: ${token.substring(0, 20)}...');
+
+      // Use ApiEndpoints to get the correct upload URL
+      final endpoint = ApiEndpoints.uploadAgencyDocument(widget.agencyId);
+      final uri = Uri.parse(endpoint);
+      
+      debugPrint('🌐 Upload URL: $endpoint');
+
+      // Create multipart request
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add Authorization header with JWT token
+      request.headers['Authorization'] = 'Bearer $token';
+
+      // Add file from camera
+      debugPrint('📷 Processing camera image: ${image.name}');
+      final bytes = await image.readAsBytes();
+      debugPrint('📦 Image bytes: ${bytes.length} bytes');
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: image.name,
+        contentType: MediaType.parse(lookupMimeType(image.name) ?? 'image/jpeg'),
+      ));
+      
+      // Add form fields (using snake_case as backend expects)
+      request.fields['agency_id'] = widget.agencyId;
+      request.fields['document_type'] = documentType;
+      request.fields['description'] = 'Agency verification document';
+      
+      debugPrint('📋 Form fields added:');
+      debugPrint('   - agency_id: ${widget.agencyId}');
+      debugPrint('   - document_type: $documentType');
+      debugPrint('   - description: Agency verification document');
+
+      // Send request
+      final streamedResponse = await request.send();
+      debugPrint('📥 Response received, status code: ${streamedResponse.statusCode}');
+      
+      final resp = await http.Response.fromStream(streamedResponse);
+      debugPrint('📄 Response body: ${resp.body}');
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        debugPrint('✅ Document uploaded successfully!');
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text("✅ ${documentType.replaceAll('_', ' ')} uploaded successfully")));
+          // Close dialog and return true to trigger refresh
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        final errorMsg = "Upload failed: ${resp.statusCode} ${resp.body}";
+        debugPrint('❌ $errorMsg');
+        throw Exception(errorMsg);
+      }
+    } catch (e) {
+      debugPrint("❌ Upload error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("❌ Upload failed: ${e.toString()}"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingStates[documentType] = false;
+        });
       }
     }
   }
@@ -277,87 +342,28 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Document Type Selection
-              const Text(
-                "Document Type *",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _selectedDocumentType,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                hint: const Text("Select document type"),
-                items: _documentTypes.map((type) {
-                  return DropdownMenuItem<String>(
-                    value: type['value'],
-                    child: Text(type['label']!),
+              Column(
+                children: requiredDocumentTypes.map((type) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      title: Text(type.replaceAll('_', ' ')),
+                      trailing: ElevatedButton(
+                        onPressed: (_uploadingStates[type] == true)
+                            ? null
+                            : () => pickAndUploadDocument(type),
+                        child: (_uploadingStates[type] == true)
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text("Upload"),
+                      ),
+                    ),
                   );
                 }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedDocumentType = value;
-                    if (value != 'other') {
-                      _otherDocumentTypeController.clear();
-                    }
-                  });
-                },
               ),
-              // Custom document type input (shown when "Other Documents" is selected)
-              if (_selectedDocumentType == 'other') ...[
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _otherDocumentTypeController,
-                  decoration: InputDecoration(
-                    labelText: "Enter document type *",
-                    hintText: "e.g., Operating License, Permit, etc.",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              // File selection buttons
-              ElevatedButton.icon(
-                onPressed: _takePhoto,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text("Take Photo"),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: _pickFile,
-                icon: const Icon(Icons.attach_file),
-                label: const Text("Pick File"),
-              ),
-              const SizedBox(height: 16),
-              // Selected file display
-              if (_cameraImage != null || _pickedFile != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.insert_drive_file, color: Colors.teal),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _cameraImage?.name ?? _pickedFile!.name,
-                          style: const TextStyle(fontSize: 14),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               // Error display
               if (_error != null)
                 Padding(
@@ -388,17 +394,9 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-        ElevatedButton(
-          onPressed: (_uploading || 
-                      _selectedDocumentType == null || 
-                      (_selectedDocumentType == 'other' && _otherDocumentTypeController.text.trim().isEmpty) ||
-                      (_cameraImage == null && _pickedFile == null))
-              ? null 
-              : _uploadDocument,
-          child: _uploading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text("Upload Document"),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Close"),
         ),
       ],
     );
