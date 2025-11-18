@@ -1,4 +1,14 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  print("🔴 Background message: ${message.messageId}");
+}
+
+
 import 'package:flutter/services.dart';
 import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
 import 'dart:async';
@@ -27,6 +37,7 @@ import 'package:flutter_backend/services/notification_service.dart';
 import 'package:flutter_backend/services/territory_service.dart';
 import 'package:flutter_backend/services/api_client.dart';
 import 'package:flutter_backend/services/subscription_service.dart';
+import 'package:flutter_backend/services/audit_logs_service.dart';
 // Frontend Widgets
 import 'widgets/document_verification_page.dart';
 import 'widgets/lead_popup_service.dart';
@@ -39,22 +50,25 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
+  // Firebase init
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+
+  // Supabase init
   await Supabase.initialize(
     url: 'https://ioqjonxjptvshdwhbuzv.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvcWpvbnhqcHR2c2hkd2hidXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0ODM0MjUsImV4cCI6MjA3NzA1OTQyNX0.vMF8X2B0p5MFb2huro5kRBPAerkvQ2iKLclhCQMyW9w',
   );
 
-  // Clear cached API URL to force fresh detection
+  // API URL reset
   await ApiClient.clearCachedUrl();
 
-  // ✅ DISABLE TEST MODE - Use live backend
+  // Disable test mode
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool('test_mode', false);
   print('✅ Test mode disabled - Using live backend');
 
-  // Initialize Stripe (publishable key only) - with error handling
-  // Only initialize on mobile platforms (iOS/Android) - skip on web/desktop
+  // Stripe init
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.android)) {
@@ -62,26 +76,23 @@ Future<void> main() async {
       stripe.Stripe.publishableKey = StripeConfig.publishableKey;
       stripe.Stripe.merchantIdentifier = StripeConfig.merchantIdentifier;
       await stripe.Stripe.instance.applySettings();
-      print('✅ Stripe initialized successfully');
+      print('✅ Stripe initialized');
     } catch (e) {
-      // Stripe initialization failed - app can still run without payment features
       print('⚠️ Stripe initialization failed: $e');
-      print('⚠️ App will continue without Stripe payment features');
     }
-  } else {
-    print(
-        'ℹ️ Skipping Stripe initialization on ${kIsWeb ? "web" : defaultTargetPlatform} platform');
   }
 
-  // Initialize API client
+  // API client init
   try {
     await ApiClient.initialize();
-    print('✅ API client initialized successfully');
   } catch (e) {
-    // If initialization fails, continue anyway - app can work offline
-    print('⚠️ API client initialization warning: $e');
-    // Continue anyway - API client will handle connection errors later
+    print('⚠️ API client initialization failed: $e');
   }
+
+  // 🚀 **INIT NOTIFICATION SERVICE**
+  await FCMNotificationService.initNotifications();
+
+
   runApp(const HealthcareApp());
 }
 
@@ -5324,12 +5335,27 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
 
   Future<void> _loadDashboardData() async {
     try {
-      // ✅ USE NEW LEADSERVICE - Fetch real leads from mobile API
-      final allLeads = await LeadService.getLeads(excludeRejected: true);
+      // Get agency ID for fetching communicated leads
+      final agencyId = await AuthService.getAgencyId();
+
+      if (agencyId == null) {
+        print('❌ Agency ID not found');
+        if (mounted) {
+          setState(() {
+            _recentLeads = [];
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      // ✅ FETCH LEADS FROM AUDIT_LOGS - Get communicated/assigned leads
+      print('📊 Fetching leads from audit_logs for agency: $agencyId');
+      final auditLeads = await AuditLogsService.getAssignedLeads(agencyId);
 
       // DEBUG: Print sample data
-      if (allLeads.isNotEmpty) {
-        print('📊 Sample lead data from API: ${allLeads[0]}');
+      if (auditLeads.isNotEmpty) {
+        print('📊 Sample lead data from audit_logs: ${auditLeads[0]}');
       }
 
       // ✅ FILTER LEADS BY USER'S SELECTED ZIPCODES
@@ -5337,7 +5363,7 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
           widget.userZipcodes.map((z) => z['zipcode'] ?? '').toList();
       print('🔍 Filtering leads for zipcodes: $userZipcodeStrings');
 
-      final filteredLeads = allLeads.where((lead) {
+      final filteredLeads = auditLeads.where((lead) {
         final leadZipcode = lead['zipcode']?.toString() ?? '';
         final matches = userZipcodeStrings.contains(leadZipcode);
         if (matches) {
@@ -5346,6 +5372,9 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
         }
         return matches;
       }).toList();
+
+      // Also get regular leads from API for stats calculation
+      final allLeads = await LeadService.getLeads(excludeRejected: true);
 
       print('📊 Total leads in DB: ${allLeads.length}');
       print('✅ Filtered leads matching zipcodes: ${filteredLeads.length}');

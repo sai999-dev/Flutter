@@ -87,58 +87,82 @@ class AuthService {
     }
   }
 
-  /// LOGIN
-  static Future<Map<String, dynamic>> login(
-      String email, String password) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    final normalizedPassword = password.trim();
+/// LOGIN
+static Future<Map<String, dynamic>> login(
+    String email, String password) async {
+  final normalizedEmail = email.trim().toLowerCase();
+  final normalizedPassword = password.trim();
 
-    print('🔐 Attempting login: $normalizedEmail');
+  print('🔐 Attempting login: $normalizedEmail');
 
-    await ApiClient.clearToken();
+  await ApiClient.clearToken();
 
-    try {
-      final response = await ApiClient.post(
-        '/api/mobile/auth/login',
-        {
-          'email': normalizedEmail,
-          'password': normalizedPassword,
-        },
-        requireAuth: false,
-      );
+  try {
+    final response = await ApiClient.post(
+      '/api/mobile/auth/login',
+      {
+        'email': normalizedEmail,
+        'password': normalizedPassword,
+      },
+      requireAuth: false,
+    );
 
-      if (response == null) throw Exception('No response from server');
+    if (response == null) throw Exception('No response from server');
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final decoded = json.decode(response.body);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final decoded = json.decode(response.body);
 
-        final token = decoded['token'];
-        if (token != null) await ApiClient.saveToken(token);
+      final token = decoded['token'];
+      if (token != null) await ApiClient.saveToken(token);
 
-        final profile = decoded['data'] is Map<String, dynamic>
-            ? decoded['data']
-            : decoded;
+      final profile = decoded['data'] is Map<String, dynamic>
+          ? decoded['data']
+          : decoded;
 
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_profile', json.encode(profile));
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_profile', json.encode(profile));
 
-        final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
-        if (agencyId.toString().isNotEmpty) {
-          await prefs.setString('agency_id', agencyId.toString());
-        }
-
-        print('✅ Login successful');
-
-        return decoded;
-      } else {
-        final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Login failed');
+      final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
+      if (agencyId.toString().isNotEmpty) {
+        await prefs.setString('agency_id', agencyId.toString());
       }
-    } catch (e) {
-      print('❌ Login error: $e');
-      rethrow;
+
+      print('✅ Login successful');
+
+      // 📌 Update FCM token immediately after login
+      try {
+        final fcmToken = await PushTokenHelper.getToken();
+
+        if (fcmToken != null) {
+          print("📲 Updating FCM on backend...");
+
+          await ApiClient.post(
+            '/api/mobile/auth/update-fcm',
+            {
+              "fcm_token": fcmToken,
+            },
+            requireAuth: true,
+          );
+
+          print("✅ FCM token updated successfully");
+        } else {
+          print("⚠️ Could not get FCM token");
+        }
+      } catch (e) {
+        print("❌ Error updating FCM:", e);
+      }
+
+      return decoded;
+    } else {
+      final error = json.decode(response.body);
+      throw Exception(error['message'] ?? 'Login failed');
     }
+  } catch (e) {
+    print('❌ Login error: $e');
+    rethrow;
   }
+}
+
 
   /// REGISTER DEVICE (Unused, but kept)
   static Future<bool> registerDevice({

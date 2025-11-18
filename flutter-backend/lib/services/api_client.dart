@@ -16,8 +16,9 @@ class ApiClient {
     // Fallback to localhost variants for development flexibility
     return [
       ApiConfig.activeBaseUrl,
-      'http://localhost:5000',
-      'http://127.0.0.1:5000',
+      // 'http://localhost:5000',
+      // 'http://127.0.0.1:5000',
+      'http://192.168.1.4:5000',
     ];
   }
 

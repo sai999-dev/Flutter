@@ -1,3 +1,91 @@
+// ------------------------
+// 🔥 FCM NOTIFICATION SERVICE (Required)
+// ------------------------
+
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'api_client.dart';
+
+class FCMNotificationService {
+  static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+
+  /// 🚀 Initialize notifications
+  static Future<void> initNotifications() async {
+    // Request permission
+    await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Get FCM token
+    final token = await _fcm.getToken();
+    print("🔑 FCM Token: $token");
+
+    // Save token to backend
+    if (token != null) {
+      await ApiClient.post('/api/mobile/save-device-token', {
+        'token': token,
+      });
+    }
+
+    // Setup local notifications channel
+    const channel = AndroidNotificationChannel(
+      'high_priority',
+      'High Priority Notifications',
+      importance: Importance.high,
+    );
+
+    await _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+
+    // Initialize local notification plugin
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+
+    await _notifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (details) {
+        print("📌 Notification clicked!");
+        // TODO: Redirect user to a specific screen
+      },
+    );
+
+    // Foreground message handler
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print("📩 Foreground Notification: ${message.notification?.title}");
+
+      _notifications.show(
+        message.hashCode,
+        message.notification?.title,
+        message.notification?.body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'high_priority',
+            'High Priority Notifications',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+        ),
+      );
+    });
+
+    // Background (when app is closed)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print("📲 User clicked notification while app closed");
+      // TODO: Navigate to specific page
+    });
+  }
+}
+
+
+
+
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
