@@ -88,12 +88,10 @@ class _DocumentVerificationPageState extends State<DocumentVerificationPage> {
               : null;
           _isLoading = false;
           // Set default status if error occurred
-          if (_verificationStatus == null) {
-            _verificationStatus = {
+          _verificationStatus ??= {
               'document_status': 'no_document',
               'message': 'Unable to load verification status',
             };
-          }
         });
       }
     }
