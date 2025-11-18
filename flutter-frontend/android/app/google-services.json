@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "695100379940",
+    "project_id": "leadsmarketplace-21a96",
+    "storage_bucket": "leadsmarketplace-21a96.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:695100379940:android:cdfef1c81aa6af94c3d9b1",
+        "android_client_info": {
+          "package_name": "com.starboyanalytica.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBdefL6J4vIBO9FTheFlSCV9KA74XSV3vg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

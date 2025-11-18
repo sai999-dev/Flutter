@@ -1,4 +1,14 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  print("🔴 Background message: ${message.messageId}");
+}
+
+
 import 'package:flutter/services.dart';
 import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
 import 'dart:async';
@@ -40,22 +50,25 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
+  // Firebase init
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+
+  // Supabase init
   await Supabase.initialize(
     url: 'https://ioqjonxjptvshdwhbuzv.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvcWpvbnhqcHR2c2hkd2hidXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0ODM0MjUsImV4cCI6MjA3NzA1OTQyNX0.vMF8X2B0p5MFb2huro5kRBPAerkvQ2iKLclhCQMyW9w',
   );
 
-  // Clear cached API URL to force fresh detection
+  // API URL reset
   await ApiClient.clearCachedUrl();
 
-  // ✅ DISABLE TEST MODE - Use live backend
+  // Disable test mode
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool('test_mode', false);
   print('✅ Test mode disabled - Using live backend');
 
-  // Initialize Stripe (publishable key only) - with error handling
-  // Only initialize on mobile platforms (iOS/Android) - skip on web/desktop
+  // Stripe init
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.android)) {
@@ -63,26 +76,23 @@ Future<void> main() async {
       stripe.Stripe.publishableKey = StripeConfig.publishableKey;
       stripe.Stripe.merchantIdentifier = StripeConfig.merchantIdentifier;
       await stripe.Stripe.instance.applySettings();
-      print('✅ Stripe initialized successfully');
+      print('✅ Stripe initialized');
     } catch (e) {
-      // Stripe initialization failed - app can still run without payment features
       print('⚠️ Stripe initialization failed: $e');
-      print('⚠️ App will continue without Stripe payment features');
     }
-  } else {
-    print(
-        'ℹ️ Skipping Stripe initialization on ${kIsWeb ? "web" : defaultTargetPlatform} platform');
   }
 
-  // Initialize API client
+  // API client init
   try {
     await ApiClient.initialize();
-    print('✅ API client initialized successfully');
   } catch (e) {
-    // If initialization fails, continue anyway - app can work offline
-    print('⚠️ API client initialization warning: $e');
-    // Continue anyway - API client will handle connection errors later
+    print('⚠️ API client initialization failed: $e');
   }
+
+  // 🚀 **INIT NOTIFICATION SERVICE**
+  await FCMNotificationService.initNotifications();
+
+
   runApp(const HealthcareApp());
 }
 

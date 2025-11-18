@@ -1,6 +1,20 @@
 // Flutter Backend Package
 // Export all backend services for easy importing
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+class PushTokenHelper {
+  static Future<String?> getToken() async {
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } catch (e) {
+      print("❌ Error getting FCM token: $e");
+      return null;
+    }
+  }
+}
+
+
 // Services
 export 'services/api_client.dart';
 export 'services/auth_service.dart';
