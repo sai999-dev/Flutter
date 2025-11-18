@@ -70,3 +70,20 @@ coverage/
 # Exceptions to above rules.
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+
+# Ignore Flutter SDK ZIPs
+Flutter/flutter_install/*.zip
+Flutter/flutter_install/
+Flutter/flutter_install/flutter_sdk/*.zip
+flutter_latest.zip
+flutter_sdk.zip
+
+# Ignore NUL system file
+NUL
+nul
+
+# Ignore Flutter SDK folders (if accidentally added)
+flutter/
+Flutter/flutter_sdk/
+sdk/
+
