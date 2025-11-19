@@ -2464,77 +2464,52 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text('Industry', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: _selectedIndustry,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: const Color(0xFFF5F7FA),
-              hintText: 'Select your industry',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: Color(0xFF00888C), width: 2),
-              ),
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: 'Home Health and Hospice',
-                child: Text('Home Health and Hospice'),
-              ),
-              DropdownMenuItem(
-                value: 'Insurance',
-                child: Text('Insurance'),
-              ),
-              DropdownMenuItem(
-                value: 'Finance',
-                child: Text('Finance'),
-              ),
-              DropdownMenuItem(
-                value: 'Handyman Services',
-                child: Text('Handyman Services'),
-              ),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _selectedIndustry = value;
-              });
-            },
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _nextStep,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00888C),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
+            const SizedBox(height: 16),
+            const Text('Industry', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _selectedIndustry,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF5F7FA),
+                hintText: 'Select your industry',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide:
                       const BorderSide(color: Color(0xFF00888C), width: 2),
                 ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.red, width: 1),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.red, width: 2),
-                ),
               ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'Home Health and Hospice',
+                  child: Text('Home Health and Hospice'),
+                ),
+                DropdownMenuItem(
+                  value: 'Insurance',
+                  child: Text('Insurance'),
+                ),
+                DropdownMenuItem(
+                  value: 'Finance',
+                  child: Text('Finance'),
+                ),
+                DropdownMenuItem(
+                  value: 'Handyman Services',
+                  child: Text('Handyman Services'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedIndustry = value;
+                });
+              },
             ),
             const SizedBox(height: 32),
             SizedBox(

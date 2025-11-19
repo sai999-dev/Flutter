@@ -1,7 +1,7 @@
 // lib/config/api_config.dart
 class ApiConfig {
   // Development
-  static const String devBaseUrl = "http://127.0.0.1:3001";
+  static const String devBaseUrl = "http://127.0.0.1:3000";
 
   // Staging (optional)
   static const String stagingBaseUrl = "https://staging.leadmarketplacepro.com";
