@@ -277,14 +277,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.7.0"
-  flutter_lints:
-    dependency: "direct dev"
-    description:
-      name: flutter_lints
-      sha256: "5398f14efa795ffb7a33e9b6a08798b26a180edac4ad7db3f231e40f82ce11e1"
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.0"
   flutter_local_notifications:
     dependency: "direct main"
     description:
@@ -732,14 +724,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.1"
-  lints:
-    dependency: transitive
-    description:
-      name: lints
-      sha256: c35bb79562d980e9a453fc715854e1ed39e24e7d0297a880ef54e17f9874a9d7
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.1.1"
   logger:
     dependency: "direct main"
     description:
@@ -1250,7 +1234,7 @@ packages:
     source: hosted
     version: "14.3.0"
   web:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: web
       sha256: "868d88a33d8a87b18ffc05f9f030ba328ffefba92d6c127917a2ba740f9cfe4a"

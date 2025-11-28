@@ -35,7 +35,34 @@
   <!-- <meta name="google-signin-client_id" content="YOUR_CLIENT_ID_HERE.apps.googleusercontent.com"> -->
   
   <title>starboy_analytica</title>
-  <link rel="manifest" href="manifest.json">
+  <script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/firebase-messaging-sw.js")
+      .then((registration) => {
+        console.log("Service worker registered:", registration);
+      })
+      .catch((err) => {
+        console.error("Service worker registration failed:", err);
+      });
+  }
+</script>
+
+  <!-- In the <head> section, ensure you have: -->
+<meta name="theme-color" content="#1967d2">
+<link rel="manifest" href="/manifest.json">
+
+<!-- Service worker registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/firebase-messaging-sw.js')
+      .then(registration => {
+        console.log('✅ Service Worker registered:', registration);
+      })
+      .catch(error => {
+        console.error('❌ Service Worker registration failed:', error);
+      });
+  }
+</script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

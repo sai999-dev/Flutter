@@ -129,29 +129,6 @@ static Future<Map<String, dynamic>> login(
 
       print('✅ Login successful');
 
-      // 📌 Update FCM token immediately after login
-      try {
-        final fcmToken = await PushTokenHelper.getToken();
-
-        if (fcmToken != null) {
-          print("📲 Updating FCM on backend...");
-
-          await ApiClient.post(
-            '/api/mobile/auth/update-fcm',
-            {
-              "fcm_token": fcmToken,
-            },
-            requireAuth: true,
-          );
-
-          print("✅ FCM token updated successfully");
-        } else {
-          print("⚠️ Could not get FCM token");
-        }
-      } catch (e) {
-        print("❌ Error updating FCM:", e);
-      }
-
       return decoded;
     } else {
       final error = json.decode(response.body);

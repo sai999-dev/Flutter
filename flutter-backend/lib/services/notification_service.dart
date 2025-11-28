@@ -6,14 +6,24 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+
+
+
 
 class FCMNotificationService {
   static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  /// 🚀 Initialize notifications
+  /// 🚀 Initialize notifications (Android only)
   static Future<void> initNotifications() async {
+    if (kIsWeb) {
+      print("🌍 Web detected — Skipping Android notification initialization");
+      return;
+    }
+
     // Request permission
     await _fcm.requestPermission(
       alert: true,
@@ -23,12 +33,13 @@ class FCMNotificationService {
 
     // Get FCM token
     final token = await _fcm.getToken();
-    print("🔑 FCM Token: $token");
+    print("🔑 Android FCM Token: $token");
 
     // Save token to backend
     if (token != null) {
-      await ApiClient.post('/api/mobile/save-device-token', {
+      await ApiClient.post('/api/v1/agencies/save-device-token', {
         'token': token,
+        "agency_id": "4fb78be8-6cc0-4740-be77-706de3af29fa",
       });
     }
 
@@ -52,7 +63,6 @@ class FCMNotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (details) {
         print("📌 Notification clicked!");
-        // TODO: Redirect user to a specific screen
       },
     );
 
@@ -75,10 +85,9 @@ class FCMNotificationService {
       );
     });
 
-    // Background (when app is closed)
+    // Background click handler
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print("📲 User clicked notification while app closed");
-      // TODO: Navigate to specific page
+      print("📲 User clicked notification while app was closed");
     });
   }
 }
@@ -86,9 +95,7 @@ class FCMNotificationService {
 
 
 
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'api_client.dart';
+
 
 /// Notification Settings Service
 /// Implements: GET /api/mobile/notifications/settings, PUT /api/mobile/notifications/settings
