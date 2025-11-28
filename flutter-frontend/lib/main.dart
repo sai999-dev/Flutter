@@ -1,36 +1,64 @@
+// ---------------------------------------------
+// CORE IMPORTS
+// ---------------------------------------------
+import 'dart:async';
+import 'dart:convert';
+
+
+import 'firebase_options.dart';
+
+
+import 'package:flutter/foundation.dart';
+
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'services/PushTokenHelper.dart';
+
+// ---------------------------------------------
+// FIREBASE IMPORTS
+// ---------------------------------------------
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/material.dart';
-import 'dart:convert';
+
+// ---------------------------------------------
+// NETWORKING & SDK IMPORTS
+// ---------------------------------------------
 import 'package:http/http.dart' as http;
-
-Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-  print("🔴 Background message: ${message.messageId}");
-}
-
-
-import 'package:flutter/services.dart';
-import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
-import 'dart:async';
 import 'package:flutter/foundation.dart'
-    show
-        kIsWeb,
-        defaultTargetPlatform,
-        TargetPlatform,
-        kReleaseMode,
-        kDebugMode;
+    show kIsWeb, defaultTargetPlatform, TargetPlatform, kReleaseMode, kDebugMode;
+
+// ---------------------------------------------
+// STRIPE
+// ---------------------------------------------
 import 'package:flutter_stripe/flutter_stripe.dart' as stripe;
 import 'stripe_config.dart';
+
+// ---------------------------------------------
+// DEVICE / STORAGE
+// ---------------------------------------------
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+
+// ---------------------------------------------
+// UTILITIES
+// ---------------------------------------------
 import 'package:url_launcher/url_launcher.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-// Backend Services (from package)
+
+// ---------------------------------------------
+// SUPABASE
+// ---------------------------------------------
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+// ---------------------------------------------
+// BACKEND SERVICES
+// ---------------------------------------------
+import 'package:flutter_backend/utils/zipcode_lookup_service.dart';
 import 'package:flutter_backend/services/lead_service.dart';
 import 'package:flutter_backend/services/auth_service.dart';
 import 'package:flutter_backend/services/notification_service.dart';
@@ -38,37 +66,95 @@ import 'package:flutter_backend/services/territory_service.dart';
 import 'package:flutter_backend/services/api_client.dart';
 import 'package:flutter_backend/services/subscription_service.dart';
 import 'package:flutter_backend/services/audit_logs_service.dart';
-// Frontend Widgets
+
+// ---------------------------------------------
+// FRONTEND WIDGETS
+// ---------------------------------------------
 import 'widgets/document_verification_page.dart';
 import 'widgets/lead_popup_service.dart';
 import 'services/realtime_lead_listener.dart';
-// Mobile App - Agency Self-Service Portal
-// Backend API is in separate repository (middleware layer)
 
+// ---------------------------------------------
+// BACKGROUND FCM HANDLER
+// ---------------------------------------------
+Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  print("🔴 Background message: ${message.messageId}");
+}
 
-import 'package:supabase_flutter/supabase_flutter.dart';
+// ---------------------------------------------
+// MAIN APPLICATION ENTRY POINT
+// ---------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase init
-  await Firebase.initializeApp();
-  FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
-
-  // Supabase init
-  await Supabase.initialize(
-    url: 'https://ioqjonxjptvshdwhbuzv.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvcWpvbnhqcHR2c2hkd2hidXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0ODM0MjUsImV4cCI6MjA3NzA1OTQyNX0.vMF8X2B0p5MFb2huro5kRBPAerkvQ2iKLclhCQMyW9w',
+  // -------------------------------
+  // Firebase Initialization
+  // -------------------------------
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // API URL reset
+  // -------------------------------
+  // Platform-specific Firebase Messaging
+  // -------------------------------
+  if (kIsWeb) {
+    // 🔵 WEB FCM SETUP
+    await FirebaseMessaging.instance.requestPermission();
+
+    String? webToken = await FirebaseMessaging.instance.getToken(
+      vapidKey:
+          "BE_X7FHKgdPp1qOrsFRadAnQrgR-jEOKhLKCe5gPlEJX7CQtoUTcZVpxUoAaiLCqlQLvSa_IDWbsrMcPAlnM1Q4",
+    );
+
+    print("🌐 Web FCM Token: $webToken");
+
+    // 🔥 SEND WEB TOKEN TO BACKEND
+    if (webToken != null) {
+      try {
+        await ApiClient.post(
+          '/api/v1/agencies/save-device-token',
+          {
+            "token": webToken,
+            "platform": "web",
+            "agency_id": "4fb78be8-6cc0-4740-be77-706de3af29fa",
+          },
+          requireAuth: false,
+        );
+
+        print("✅ Web FCM token saved to backend");
+      } catch (e) {
+        print("❌ Failed to save Web FCM token: $e");
+      }
+    }
+  } else {
+    // 🟩 ANDROID / IOS SETUP
+    FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
+
+    await FCMNotificationService.initNotifications();
+    await PushTokenHelper.initializeFCM();
+  }
+
+  // -------------------------------
+  // Supabase Init
+  // -------------------------------
+  await Supabase.initialize(
+    url: 'https://ioqjonxjptvshdwhbuzv.supabase.co',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvcWpvbnhqcHR2c2hkd2hidXp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0ODM0MjUsImV4cCI6MjA3NzA1OTQyNX0.vMF8X2B0p5MFb2huro5kRBPAerkvQ2iKLclhCQMyW9w',
+  );
+
+  // -------------------------------
+  // API URL Reset
+  // -------------------------------
   await ApiClient.clearCachedUrl();
 
-  // Disable test mode
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool('test_mode', false);
   print('✅ Test mode disabled - Using live backend');
 
-  // Stripe init
+  // -------------------------------
+  // Stripe Init
+  // -------------------------------
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.android)) {
@@ -82,19 +168,24 @@ Future<void> main() async {
     }
   }
 
-  // API client init
+  // -------------------------------
+  // API Client Init
+  // -------------------------------
   try {
     await ApiClient.initialize();
   } catch (e) {
     print('⚠️ API client initialization failed: $e');
   }
 
-  // 🚀 **INIT NOTIFICATION SERVICE**
-  await FCMNotificationService.initNotifications();
-
-
+  // -------------------------------
+  // RUN APP
+  // -------------------------------
   runApp(const HealthcareApp());
 }
+
+
+
+
 
 class HealthcareApp extends StatelessWidget {
   const HealthcareApp({super.key});
@@ -454,87 +545,89 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _login() async {
-    // Validate form
-    if (!_formKey.currentState!.validate()) {
-      return;
+Future<void> _login() async {
+  // Validate form
+  if (!_formKey.currentState!.validate()) {
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    // Trim email + password
+    final email = _emailController.text.trim().toLowerCase();
+    final password = _passwordController.text.trim();
+
+    print('🔐 Login attempt - Email: $email');
+
+    // Login with backend
+    Map<String, dynamic> response;
+    try {
+      response = await AuthService.login(email, password);
+    } catch (e) {
+      print('❌ Login error details: $e');
+      rethrow;
     }
 
-    setState(() => _isLoading = true);
+    // Save auth token
+    final token = response['token'];
+    if (token != null && token is String && token.isNotEmpty) {
+      await ApiClient.saveToken(token);
+      print('✅ Auth token saved');
+    }
 
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setString('last_login', DateTime.now().toIso8601String());
+
+    // Extract profile from response
+    final profile = response['data'] is Map<String, dynamic>
+        ? response['data'] as Map<String, dynamic>
+        : response;
+
+    // Extract user info
+    final userName = profile['contact_name'] ??
+        profile['name'] ??
+        profile['user_name'] ??
+        _emailController.text.split('@')[0];
+
+    final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
+    final agencyName =
+        profile['agency_name'] ?? profile['business_name'] ?? '';
+
+    await prefs.setString('user_name', userName.toString());
+    if (agencyId.toString().isNotEmpty) {
+      await prefs.setString('agency_id', agencyId.toString());
+    }
+    if (agencyName.toString().isNotEmpty) {
+      await prefs.setString('agency_name', agencyName.toString());
+    }
+
+    // Start realtime lead listener
+    if (agencyId.toString().isNotEmpty) {
+      RealtimeLeadListener.startListening(agencyId.toString());
+    }
+
+    // Save email
+    await prefs.setString('user_email', _emailController.text);
+
+    // Remember me
+    if (_rememberMe) {
+      await prefs.setBool('remember_me', true);
+      await prefs.setString('saved_email', _emailController.text);
+    } else {
+      await prefs.remove('remember_me');
+      await prefs.remove('saved_email');
+    }
+
+    // -----------------------------------------------------
+    // 📲 Register device for push notifications (FCM)
+    // -----------------------------------------------------
     try {
-      // ✅ TRIM EMAIL AND PASSWORD to avoid whitespace issues
-      final email = _emailController.text.trim().toLowerCase();
-      final password = _passwordController.text.trim();
-      
-      print('🔐 Login attempt - Email: $email');
-      
-      // ✅ TRY REAL API LOGIN using AuthService
-      Map<String, dynamic> response;
-      try {
-        response = await AuthService.login(
-          email,
-          password,
-        );
-      } catch (e) {
-        // ✅ LIVE MODE: Show error - no test mode fallback
-        print('❌ Login error details: $e');
-        rethrow;
-      }
+      final fcmToken = await PushTokenHelper.getToken();
+      print("📲 Login FCM Token: $fcmToken");
 
-      // ✅ SAVE AUTH TOKEN (AuthService.login already saves it, but verify)
-      final token = response['token'];
-      if (token != null && token is String && token.isNotEmpty) {
-        await ApiClient.saveToken(token);
-        print('✅ Auth token saved');
-      }
-
-      // ✅ SAVE LOGIN STATE
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_logged_in', true);
-      await prefs.setString('last_login', DateTime.now().toIso8601String());
-
-      // Save user data from backend response
-      final profile = response['data'] is Map<String, dynamic>
-          ? response['data'] as Map<String, dynamic>
-          : response;
-
-      // Extract user information
-      final userName = profile['contact_name'] ??
-          profile['name'] ??
-          profile['user_name'] ??
-          _emailController.text.split('@')[0];
-      final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
-      final agencyName =
-          profile['agency_name'] ?? profile['business_name'] ?? '';
-
-      await prefs.setString('user_name', userName.toString());
-      if (agencyId.toString().isNotEmpty) {
-        await prefs.setString('agency_id', agencyId.toString());
-      }
-      if (agencyName.toString().isNotEmpty) {
-        await prefs.setString('agency_name', agencyName.toString());
-      }
-
-      // Start realtime lead listener for this agency
-      if (agencyId.toString().isNotEmpty) {
-        RealtimeLeadListener.startListening(agencyId.toString());
-      }
-
-      // Save email
-      await prefs.setString('user_email', _emailController.text);
-
-      // ✅ SAVE REMEMBER ME
-      if (_rememberMe) {
-        await prefs.setBool('remember_me', true);
-        await prefs.setString('saved_email', _emailController.text);
-      } else {
-        await prefs.remove('remember_me');
-        await prefs.remove('saved_email');
-      }
-
-      // Register device for push notifications
-      try {
+      if (fcmToken != null && fcmToken.isNotEmpty) {
         final platform = kIsWeb
             ? 'web'
             : (defaultTargetPlatform == TargetPlatform.android
@@ -542,73 +635,85 @@ class _LoginPageState extends State<LoginPage> {
                 : (defaultTargetPlatform == TargetPlatform.iOS
                     ? 'ios'
                     : 'other'));
+
+        // Send token to Node backend
         await AuthService.registerDevice(
-          deviceToken:
-              'device_${DateTime.now().millisecondsSinceEpoch}', // Replace with actual FCM token
+          deviceToken: fcmToken,
           platform: platform,
         );
-      } catch (e) {
-        print('Device registration failed: $e');
-      }
 
-      // ✅ Sync zipcodes from backend after login
-      try {
-        await TerritoryService.syncZipcodes();
-      } catch (e) {
-        print('Zipcode sync failed: $e');
-      }
+        // Save in Supabase also
+        await PushTokenHelper.saveTokenToSupabase(fcmToken);
 
-      final savedUserName =
-          prefs.getString('user_name') ?? _emailController.text.split('@')[0];
-
-      setState(() => _isLoading = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '🎉 Welcome back, $savedUserName! Let\'s find great leads today!'),
-          backgroundColor: const Color(0xFF00888C),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-            builder: (context) => const HomePage(initialZipcodes: null)),
-      );
-    } catch (e) {
-      setState(() => _isLoading = false);
-
-      // Extract user-friendly error message
-      String errorMessage = 'Login failed';
-      if (e.toString().contains('No backend server available')) {
-        errorMessage =
-            'Backend server is not running. Please start the server.';
-      } else if (e.toString().contains('Exception:')) {
-        errorMessage = e.toString().replaceFirst('Exception: ', '');
-      } else if (e.toString().contains('timeout')) {
-        errorMessage =
-            'Connection timeout. Please check your internet connection.';
-      } else if (e.toString().contains('credentials') ||
-          e.toString().contains('password')) {
-        errorMessage =
-            'Invalid email or password. Please check your credentials.';
+        print("✅ FCM token sent to backend & saved to Supabase");
       } else {
-        errorMessage = e.toString();
+        print("⚠️ FCM token is NULL — cannot register device");
       }
-
-      print('❌ Login error details: $e');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ $errorMessage'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+    } catch (e) {
+      print("❌ Device registration failed: $e");
     }
+
+    // Sync zipcodes
+    try {
+      await TerritoryService.syncZipcodes();
+    } catch (e) {
+      print('Zipcode sync failed: $e');
+    }
+
+    // Welcome message
+    final savedUserName =
+        prefs.getString('user_name') ?? _emailController.text.split('@')[0];
+
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            '🎉 Welcome back, $savedUserName! Let\'s find great leads today!'),
+        backgroundColor: const Color(0xFF00888C),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+
+    // Navigate
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HomePage(initialZipcodes: null),
+      ),
+    );
+  } catch (e) {
+    setState(() => _isLoading = false);
+
+    // Create readable error message
+    String errorMessage = 'Login failed';
+    if (e.toString().contains('No backend server available')) {
+      errorMessage = 'Backend server is not running. Please start the server.';
+    } else if (e.toString().contains('Exception:')) {
+      errorMessage = e.toString().replaceFirst('Exception: ', '');
+    } else if (e.toString().contains('timeout')) {
+      errorMessage =
+          'Connection timeout. Please check your internet connection.';
+    } else if (e.toString().contains('credentials') ||
+        e.toString().contains('password')) {
+      errorMessage =
+          'Invalid email or password. Please check your credentials.';
+    } else {
+      errorMessage = e.toString();
+    }
+
+    print('❌ Login error details: $e');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('❌ $errorMessage'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+      ),
+    );
   }
+}
+
 
   void _showForgotPassword() {
     // Navigate to ForgotPasswordPage instead of showing dialog
