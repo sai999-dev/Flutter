@@ -73,6 +73,7 @@ import 'package:flutter_backend/services/audit_logs_service.dart';
 import 'widgets/document_verification_page.dart';
 import 'widgets/lead_popup_service.dart';
 import 'services/realtime_lead_listener.dart';
+import 'services/stripe_service.dart';
 
 // ---------------------------------------------
 // BACKGROUND FCM HANDLER
@@ -2003,8 +2004,179 @@ class _MultiStepRegisterPageState extends State<MultiStepRegisterPage> {
       return;
     }
 
-    // Show payment gateway dialog
-    _showPaymentDialog();
+    // ✅ NEW FLOW: Create agency first, then redirect to Stripe checkout
+    setState(() => _isLoading = true);
+
+    try {
+      // Step 1: Create the agency account
+      print('📝 Creating agency account...');
+
+      final List<String> plainZipcodes = _selectedZipcodes
+          .map((z) => z.contains('|') ? z.split('|')[0] : z)
+          .toList();
+
+      final responseData = await AuthService.register(
+        email: _emailController.text,
+        password: _passwordController.text,
+        agencyName: _agencyNameController.text,
+        phone: _phoneController.text,
+        additionalData: {
+          'business_name': _agencyNameController.text,
+          'contact_name': _contactNameController.text,
+          'zipcodes': plainZipcodes,
+          'industry': _selectedIndustry ?? 'Healthcare',
+          if (_selectedPlanId != null) 'plan_id': _selectedPlanId,
+          'status': 'pending_payment', // Mark as pending payment
+        },
+      );
+
+      print('✅ Agency created successfully');
+
+      // Save agency ID and basic info
+      final prefs = await SharedPreferences.getInstance();
+      final agencyId = responseData['agency_id']?.toString();
+
+      if (agencyId == null) {
+        throw Exception('Failed to get agency ID from registration');
+      }
+
+      await prefs.setString('agency_id', agencyId);
+      await prefs.setString('user_email', _emailController.text);
+      await prefs.setString('user_name', _contactNameController.text);
+      await prefs.setString('agency_name', _agencyNameController.text);
+
+      // Save JWT token if available
+      if (responseData['token'] != null) {
+        final token = responseData['token'].toString();
+        await prefs.setString('jwt_token', token);
+        await ApiClient.saveToken(token);
+      }
+
+      // Step 2: Create Stripe checkout session
+      print('💳 Creating Stripe checkout session...');
+
+      final checkoutData = await StripeService.createCheckoutSession(
+        planId: _selectedPlanId!,
+        agencyId: agencyId,
+        email: _emailController.text,
+        unitsPurchased: _selectedZipcodes.length,
+      );
+
+      print('✅ Checkout session created: ${checkoutData['sessionId']}');
+
+      // Save checkout session info for later verification
+      await prefs.setString('stripe_session_id', checkoutData['sessionId']);
+      await prefs.setString('subscription_id', checkoutData['subscriptionId']);
+      await prefs.setString('transaction_id', checkoutData['transactionId']);
+
+      // Save registration data to complete after payment
+      await prefs.setString('pending_registration', jsonEncode({
+        'email': _emailController.text,
+        'name': _contactNameController.text,
+        'phone': _phoneController.text,
+        'agency_name': _agencyNameController.text,
+        'zipcodes': _selectedZipcodes,
+        'plan': _selectedPlan,
+        'plan_id': _selectedPlanId,
+      }));
+
+      setState(() => _isLoading = false);
+
+      // Step 3: Show dialog explaining redirect
+      final shouldProceed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.payment, color: Color(0xFF3B82F6)),
+              SizedBox(width: 12),
+              Text('Complete Payment'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'You will be redirected to Stripe\'s secure payment page to complete your subscription.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Plan: $_selectedPlan',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text('Zipcodes: ${_selectedZipcodes.length}'),
+                    Text(
+                      'Amount: \$${_planPrice(_availablePlans.firstWhere((p) => p['id'] == _selectedPlanId))}/mo',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF3B82F6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'After completing payment, you\'ll be redirected back to the app.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B82F6),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Proceed to Payment'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldProceed == true) {
+        // Step 4: Redirect to Stripe checkout
+        print('🌐 Redirecting to Stripe checkout...');
+        final success = await StripeService.redirectToCheckout(checkoutData['url']);
+
+        if (!success) {
+          throw Exception('Failed to open Stripe checkout page');
+        }
+
+        // Note: The app will be backgrounded or closed when browser opens
+        // User will return via success_url or cancel_url configured in backend
+      }
+
+    } catch (e) {
+      setState(() => _isLoading = false);
+      print('❌ Error during registration/checkout: $e');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   void _showPaymentDialog() {
