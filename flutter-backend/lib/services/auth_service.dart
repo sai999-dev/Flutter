@@ -2,11 +2,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 
-/// Mobile Authentication Service
-/// Implements: Registration, Email Verification, and Login endpoints
 class AuthService {
+
   /// Register a new agency
-  /// POST /api/mobile/auth/register
   static Future<Map<String, dynamic>> register({
     required String email,
     required String password,
@@ -14,10 +12,9 @@ class AuthService {
     String? phone,
     Map<String, dynamic>? additionalData,
   }) async {
-    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedPassword = password.trim();
-    
+
     print('🔐 Registering new agency: $normalizedEmail');
 
     try {
@@ -29,76 +26,32 @@ class AuthService {
         ...?additionalData,
       };
 
-      // ✅ Registration is a public endpoint - no authentication required
       final response = await ApiClient.post(
         '/api/mobile/auth/register',
         body,
-        requireAuth: false, // Explicitly set to false - registration is public
+        requireAuth: false,
       );
 
       if (response == null) {
-        // ✅ LIVE MODE: Always require real backend - no test mode fallback
-        throw Exception('No response from server - Backend server is not running');
+        throw Exception('No response from server');
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final decoded = json.decode(response.body) as Map<String, dynamic>;
+        final decoded = json.decode(response.body);
         print('✅ Registration successful');
-        print('📋 Response data: $decoded');
         return decoded;
       } else {
-        // Handle error response with detailed logging
-        String errorMessage = 'Registration failed';
-        Map<String, dynamic>? errorData;
-        
-        try {
-          errorData = json.decode(response.body) as Map<String, dynamic>;
-          errorMessage = (errorData['message'] ?? 
-              errorData['error'] ?? 
-              errorData['msg'] ??
-              errorData['errorMessage'] ??
-              'Registration failed').toString();
-          
-          print('❌ Registration failed: $errorMessage');
-          print('❌ Status code: ${response.statusCode}');
-          print('❌ Full error response: ${response.body}');
-          print('❌ Error data: $errorData');
-          
-          // Include additional error details if available
-          if (errorData.containsKey('errors')) {
-            print('❌ Validation errors: ${errorData['errors']}');
-          }
-          if (errorData.containsKey('details')) {
-            print('❌ Error details: ${errorData['details']}');
-          }
-        } catch (parseError) {
-          // If response body is not JSON, use status code and raw body
-          errorMessage = 'Registration failed (Status: ${response.statusCode})';
-          if (response.body.isNotEmpty) {
-            errorMessage += ': ${response.body}';
-          }
-          print('❌ Registration failed - Invalid JSON response');
-          print('❌ Status code: ${response.statusCode}');
-          print('❌ Raw response body: ${response.body}');
-          print('❌ Parse error: $parseError');
-        }
-        
-        // Create detailed error message
-        final detailedError = errorData != null && errorData.containsKey('errors')
-            ? '$errorMessage\n\nDetails: ${errorData['errors']}'
-            : errorMessage;
-        
-        throw Exception(detailedError);
+        final errorData = json.decode(response.body);
+        final message = errorData['message'] ?? "Registration failed";
+        throw Exception(message);
       }
     } catch (e) {
       print('❌ Registration error: $e');
-      print('❌ Error type: ${e.runtimeType}');
       rethrow;
     }
   }
 
-  /// Verify agency email address
-  /// POST /api/mobile/auth/verify-email
+  /// Verify email
   static Future<Map<String, dynamic>> verifyEmail({
     required String email,
     required String verificationCode,
@@ -119,144 +72,83 @@ class AuthService {
       }
 
       if (response.statusCode == 200) {
-        final decoded = json.decode(response.body) as Map<String, dynamic>;
-        
-        // Save token if provided
+        final decoded = json.decode(response.body);
         final token = decoded['token'];
-        if (token != null && token is String && token.isNotEmpty) {
-          await ApiClient.saveToken(token);
-        }
-
+        if (token != null) await ApiClient.saveToken(token);
         print('✅ Email verification successful');
         return decoded;
       } else {
         final errorData = json.decode(response.body);
-        final message = (errorData['message'] ?? 
-            errorData['error'] ?? 
-            'Email verification failed').toString();
-        throw Exception(message);
+        throw Exception(errorData['message'] ?? 'Verification failed');
       }
     } catch (e) {
-      print('❌ Email verification error: $e');
+      print('❌ Verify email error: $e');
       rethrow;
     }
   }
 
-  /// Login with email and password
-  /// POST /api/mobile/auth/login
-  /// Returns JWT token and user profile
-  static Future<Map<String, dynamic>> login(
-      String email, String password) async {
-    // ✅ TRIM AND NORMALIZE EMAIL (lowercase, no whitespace)
-    final normalizedEmail = email.trim().toLowerCase();
-    final normalizedPassword = password.trim();
-    
-    print('🔐 Attempting login: $normalizedEmail');
-    print('🔐 Password length: ${normalizedPassword.length}');
-    
-    // ✅ CLEAR ANY EXISTING TOKEN BEFORE LOGIN (in case of expired/invalid token)
-    // This ensures we don't send an invalid token that might cause 401
-    await ApiClient.clearToken();
-    print('🧹 Cleared any existing token before login');
+/// LOGIN
+static Future<Map<String, dynamic>> login(
+    String email, String password) async {
+  final normalizedEmail = email.trim().toLowerCase();
+  final normalizedPassword = password.trim();
 
-    try {
-      final response = await ApiClient.post(
-        '/api/mobile/auth/login',
-        {
-          'email': normalizedEmail,
-          'password': normalizedPassword,
-        },
-        requireAuth: false, // Login is a public endpoint - don't send JWT token
-      );
+  print('🔐 Attempting login: $normalizedEmail');
 
-      if (response == null) {
-        throw Exception('No response from server');
+  await ApiClient.clearToken();
+
+  try {
+    final response = await ApiClient.post(
+      '/api/mobile/auth/login',
+      {
+        'email': normalizedEmail,
+        'password': normalizedPassword,
+      },
+      requireAuth: false,
+    );
+
+    if (response == null) throw Exception('No response from server');
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final decoded = json.decode(response.body);
+
+      final token = decoded['token'];
+      if (token != null) await ApiClient.saveToken(token);
+
+      final profile = decoded['data'] is Map<String, dynamic>
+          ? decoded['data']
+          : decoded;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_profile', json.encode(profile));
+
+      final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
+      if (agencyId.toString().isNotEmpty) {
+        await prefs.setString('agency_id', agencyId.toString());
       }
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final decoded = json.decode(response.body) as Map<String, dynamic>;
-        print('📋 Login response: $decoded');
+      print('✅ Login successful');
 
-        // Token is top-level in our API
-        final token = decoded['token'];
-        if (token != null && token is String && token.isNotEmpty) {
-          await ApiClient.saveToken(token);
-          print('✅ JWT token saved');
-        } else {
-          print('⚠️ No token in response');
-        }
-
-        // Normalize profile: API wraps fields under `data`
-        final profile = decoded['data'] is Map<String, dynamic>
-            ? decoded['data'] as Map<String, dynamic>
-            : decoded;
-
-        // Persist
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_profile', json.encode(profile));
-        final agencyId = profile['agency_id'] ?? profile['id'] ?? '';
-        if (agencyId.toString().isNotEmpty) {
-          await prefs.setString('agency_id', agencyId.toString());
-          print('✅ Agency ID saved: $agencyId');
-        }
-        await prefs.setString('last_login', DateTime.now().toIso8601String());
-
-        print('✅ Login successful');
-        return decoded;
-      } else {
-        // Handle error response with detailed logging
-        String errorMessage = 'Login failed';
-        Map<String, dynamic>? errorData;
-        
-        try {
-          errorData = json.decode(response.body) as Map<String, dynamic>;
-          errorMessage = (errorData['message'] ?? 
-              errorData['error'] ?? 
-              errorData['msg'] ??
-              'Invalid credentials').toString();
-          
-          print('❌ Login failed: $errorMessage');
-          print('❌ Status code: ${response.statusCode}');
-          print('❌ Email attempted: $normalizedEmail');
-          print('❌ Full error response: ${response.body}');
-          
-          // Check for specific error types
-          if (errorMessage.toLowerCase().contains('password') || 
-              errorMessage.toLowerCase().contains('invalid') ||
-              errorMessage.toLowerCase().contains('credentials')) {
-            errorMessage = 'Invalid email or password. Please check your credentials and try again.';
-          } else if (errorMessage.toLowerCase().contains('not found') ||
-                     errorMessage.toLowerCase().contains('does not exist')) {
-            errorMessage = 'No account found with this email address. Please check your email or create an account.';
-          }
-        } catch (parseError) {
-          // If response body is not JSON, use status code
-          errorMessage = 'Login failed (Status: ${response.statusCode})';
-          print('❌ Login failed - Invalid JSON response: ${response.body}');
-          print('❌ Parse error: $parseError');
-        }
-        
-        throw Exception(errorMessage);
-      }
-    } catch (e) {
-      print('❌ Login error: $e');
-      print('❌ Error type: ${e.runtimeType}');
-      if (e.toString().contains('No backend server available')) {
-        throw Exception('Backend server is not running. Please start the backend server.');
-      }
-      rethrow;
+      return decoded;
+    } else {
+      final error = json.decode(response.body);
+      throw Exception(error['message'] ?? 'Login failed');
     }
+  } catch (e) {
+    print('❌ Login error: $e');
+    rethrow;
   }
+}
 
-  /// Register device for push notifications
-  /// POST /api/mobile/auth/register-device
+
+  /// REGISTER DEVICE (Unused, but kept)
   static Future<bool> registerDevice({
     required String deviceToken,
-    required String platform, // 'ios' or 'android'
+    required String platform,
     String? deviceModel,
     String? appVersion,
   }) async {
-    print('📱 Registering device for push notifications...');
+    print('📱 Registering device...');
 
     try {
       final response = await ApiClient.post(
@@ -270,31 +162,23 @@ class AuthService {
         requireAuth: true,
       );
 
-      if (response == null) {
-        return false;
-      }
+      if (response == null) return false;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Save device registration locally
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('device_token', deviceToken);
-        await prefs.setString('device_platform', platform);
         await prefs.setBool('device_registered', true);
 
-        print('✅ Device registered successfully');
         return true;
-      } else {
-        print('❌ Device registration failed: ${response.statusCode}');
-        return false;
       }
+      return false;
     } catch (e) {
-      print('❌ Device registration error: $e');
+      print('❌ Register device error: $e');
       return false;
     }
   }
 
-  /// Update device token when it changes
-  /// PUT /api/mobile/auth/update-device
+  /// UPDATE DEVICE
   static Future<bool> updateDevice({
     required String deviceToken,
     String? appVersion,
@@ -312,29 +196,21 @@ class AuthService {
         requireAuth: true,
       );
 
-      if (response == null) {
-        return false;
-      }
+      if (response == null) return false;
 
       if (response.statusCode == 200) {
-        // Update local storage
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('device_token', deviceToken);
-
-        print('✅ Device updated successfully');
         return true;
-      } else {
-        print('❌ Device update failed: ${response.statusCode}');
-        return false;
       }
+      return false;
     } catch (e) {
-      print('❌ Device update error: $e');
+      print('❌ Update device error: $e');
       return false;
     }
   }
 
-  /// Unregister device on logout
-  /// DELETE /api/mobile/auth/unregister-device
+  /// UNREGISTER
   static Future<bool> unregisterDevice() async {
     print('🚫 Unregistering device...');
 
@@ -344,70 +220,53 @@ class AuthService {
         requireAuth: true,
       );
 
-      if (response == null) {
-        return false;
-      }
+      if (response == null) return false;
 
       if (response.statusCode == 200) {
-        // Clear device info from local storage
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('device_token');
-        await prefs.remove('device_platform');
         await prefs.setBool('device_registered', false);
-
-        print('✅ Device unregistered successfully');
         return true;
-      } else {
-        print('❌ Device unregister failed: ${response.statusCode}');
-        return false;
       }
+      return false;
     } catch (e) {
-      print('❌ Device unregister error: $e');
+      print('❌ Unregister error: $e');
       return false;
     }
   }
 
-  /// Logout - clear token and unregister device
+  /// LOGOUT
   static Future<void> logout() async {
     print('👋 Logging out...');
 
     try {
-      // Unregister device from push notifications
       await unregisterDevice();
-
-      // Clear JWT token
       await ApiClient.clearToken();
 
-      // Clear user data
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_profile');
       await prefs.remove('agency_id');
       await prefs.remove('last_login');
 
-      print('✅ Logout successful');
+      print('✅ Logout complete');
     } catch (e) {
       print('❌ Logout error: $e');
     }
   }
 
-  /// Get current user profile from storage
+  /// GET PROFILE
   static Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final profileJson = prefs.getString('user_profile');
-
-      if (profileJson != null) {
-        return json.decode(profileJson);
-      }
-
+      if (profileJson != null) return json.decode(profileJson);
       return null;
     } catch (e) {
-      print('❌ Get user profile error: $e');
+      print('❌ Get profile error: $e');
       return null;
     }
   }
 
-  /// Get current agency ID
   static Future<String?> getAgencyId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -417,124 +276,70 @@ class AuthService {
     }
   }
 
-  /// Check if user is logged in
   static Future<bool> isLoggedIn() async {
     return ApiClient.isAuthenticated;
   }
 
-  /// Request password reset - sends 6-digit verification code to email
-  /// POST /api/mobile/auth/forgot-password
+  /// Forgot password
   static Future<Map<String, dynamic>> forgotPassword(String email) async {
-    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
     final normalizedEmail = email.trim().toLowerCase();
-    
-    print('🔐 Requesting password reset for: $normalizedEmail');
 
     try {
       final response = await ApiClient.post(
         '/api/mobile/auth/forgot-password',
-        {
-          'email': normalizedEmail,
-        },
-        requireAuth: false, // Public endpoint
+        {'email': normalizedEmail},
+        requireAuth: false,
       );
 
-      if (response == null) {
-        throw Exception('No response from server - Backend server may not be running');
-      }
+      if (response == null) throw Exception("No server response");
 
-      // Handle server errors (500, 502, 503, etc.)
-      if (response.statusCode >= 500) {
-        print('❌ Server error (${response.statusCode}): ${response.body}');
-        try {
-          final decoded = json.decode(response.body) as Map<String, dynamic>;
-          final message = decoded['message'] ?? decoded['error'] ?? 'Server error occurred';
-          throw Exception('Server error: $message. Please try again later or contact support.');
-        } catch (e) {
-          if (e.toString().contains('Server error:')) {
-            rethrow;
-          }
-          throw Exception('Server error (${response.statusCode}). Please check backend logs or try again later.');
-        }
-      }
+      final decoded = json.decode(response.body);
+      if (decoded['success'] == true) return decoded;
 
-      final decoded = json.decode(response.body) as Map<String, dynamic>;
-
-      if (response.statusCode == 200 && decoded['success'] == true) {
-        print('✅ Password reset code sent successfully');
-        return decoded;
-      } else {
-        // Handle client errors (400, 404, etc.)
-        final message = (decoded['message'] ?? decoded['error'] ?? 'Failed to request password reset').toString();
-        print('❌ Client error (${response.statusCode}): $message');
-        throw Exception(message);
-      }
+      throw Exception(decoded['message'] ?? "Failed");
     } catch (e) {
-      print('❌ Forgot password error: $e');
-      // If it's already a formatted exception, rethrow as-is
-      if (e.toString().contains('Exception:')) {
-        rethrow;
-      }
-      // Otherwise wrap it
-      throw Exception('Failed to request password reset: ${e.toString()}');
+      print("❌ Forgot password error: $e");
+      rethrow;
     }
   }
 
-  /// Verify 6-digit code sent to email
-  /// POST /api/mobile/auth/verify-reset-code
-  static Future<Map<String, dynamic>> verifyResetCode(String email, String code) async {
-    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
+  /// Verify reset code
+  static Future<Map<String, dynamic>> verifyResetCode(
+      String email, String code) async {
     final normalizedEmail = email.trim().toLowerCase();
-    final normalizedCode = code.trim();
-    
-    print('🔐 Verifying reset code for: $normalizedEmail');
 
     try {
       final response = await ApiClient.post(
         '/api/mobile/auth/verify-reset-code',
         {
           'email': normalizedEmail,
-          'code': normalizedCode,
+          'code': code.trim(),
         },
-        requireAuth: false, // Public endpoint
+        requireAuth: false,
       );
 
-      if (response == null) {
-        throw Exception('No response from server');
-      }
+      if (response == null) throw Exception("No server response");
 
-      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      final decoded = json.decode(response.body);
+      if (decoded['success'] == true) return decoded;
 
-      if (response.statusCode == 200 && decoded['success'] == true) {
-        print('✅ Reset code verified successfully');
-        return decoded;
-      } else {
-        final message = (decoded['message'] ?? 'Invalid or expired verification code').toString();
-        throw Exception(message);
-      }
+      throw Exception(decoded['message'] ?? "Invalid code");
     } catch (e) {
-      print('❌ Verify reset code error: $e');
+      print("❌ Verify code error: $e");
       rethrow;
     }
   }
 
-  /// Reset password with new password after code verification
-  /// POST /api/mobile/auth/reset-password
+  /// Reset password
   static Future<Map<String, dynamic>> resetPassword({
     required String email,
     required String code,
     required String newPassword,
   }) async {
-    // ✅ NORMALIZE EMAIL (trim, lowercase) for consistency
     final normalizedEmail = email.trim().toLowerCase();
-    final normalizedCode = code.trim();
-    final normalizedPassword = newPassword.trim();
-    
-    print('🔐 Resetting password for: $normalizedEmail');
 
-    // Validate password strength
-    if (normalizedPassword.length < 6) {
-      throw Exception('Password must be at least 6 characters long');
+    if (newPassword.length < 6) {
+      throw Exception("Password must be at least 6 characters");
     }
 
     try {
@@ -542,27 +347,20 @@ class AuthService {
         '/api/mobile/auth/reset-password',
         {
           'email': normalizedEmail,
-          'code': normalizedCode,
-          'new_password': normalizedPassword,
+          'code': code.trim(),
+          'new_password': newPassword.trim(),
         },
-        requireAuth: false, // Public endpoint
+        requireAuth: false,
       );
 
-      if (response == null) {
-        throw Exception('No response from server');
-      }
+      if (response == null) throw Exception("No server response");
 
-      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      final decoded = json.decode(response.body);
+      if (decoded['success'] == true) return decoded;
 
-      if (response.statusCode == 200 && decoded['success'] == true) {
-        print('✅ Password reset successfully');
-        return decoded;
-      } else {
-        final message = (decoded['message'] ?? 'Failed to reset password').toString();
-        throw Exception(message);
-      }
+      throw Exception(decoded['message'] ?? "Reset failed");
     } catch (e) {
-      print('❌ Reset password error: $e');
+      print("❌ Reset password error: $e");
       rethrow;
     }
   }
